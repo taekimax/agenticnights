@@ -68,24 +68,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let main = NSMenu()
         let item = NSMenuItem()
         let appMenu = NSMenu(title: "agenticnights")
-        let coverItem = appMenu.addItem(withTitle: "지금 가리기", action: #selector(showCover), keyEquivalent: "")
+        let coverItem = appMenu.addItem(withTitle: "Cover now", action: #selector(showCover), keyEquivalent: "")
         coverItem.target = self
-        let hideItem = appMenu.addItem(withTitle: "가림 해제", action: #selector(hideCover), keyEquivalent: "")
+        let hideItem = appMenu.addItem(withTitle: "Uncover", action: #selector(hideCover), keyEquivalent: "")
         hideItem.target = self
-        let toggleItem = appMenu.addItem(withTitle: "가리기 / 해제", action: #selector(toggleCover), keyEquivalent: "b")
+        let toggleItem = appMenu.addItem(withTitle: "Cover / uncover", action: #selector(toggleCover), keyEquivalent: "b")
         toggleItem.keyEquivalentModifierMask = [.control, .option, .command]
         toggleItem.target = self
-        let settingsItem = appMenu.addItem(withTitle: "설정…", action: #selector(showSettings), keyEquivalent: ",")
+        let settingsItem = appMenu.addItem(withTitle: "Settings…", action: #selector(showSettings), keyEquivalent: ",")
         settingsItem.target = self
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "agenticnights 종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "Quit agenticnights", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         item.submenu = appMenu
         main.addItem(item)
-        let editItem = NSMenuItem(title: "편집", action: nil, keyEquivalent: "")
-        let edit = NSMenu(title: "편집")
-        for (title, action, key) in [("실행 취소", "undo:", "z"), ("잘라내기", "cut:", "x"),
-                                     ("복사", "copy:", "c"), ("붙여넣기", "paste:", "v"),
-                                     ("모두 선택", "selectAll:", "a")] {
+        let editItem = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
+        let edit = NSMenu(title: "Edit")
+        for (title, action, key) in [("Undo", "undo:", "z"), ("Cut", "cut:", "x"),
+                                     ("Copy", "copy:", "c"), ("Paste", "paste:", "v"),
+                                     ("Select All", "selectAll:", "a")] {
             edit.addItem(withTitle: title, action: Selector(action), keyEquivalent: key)
         }
         editItem.submenu = edit
@@ -159,44 +159,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private var coverStatusText: String {
-        if cover.isCovered { return "검은 화면 표시 중" }
-        if !settings.enabled { return "꺼짐" }
-        if !sessionActive || sleeping { return "잠자기 · 일시 중지" }
-        if !schedule.active { return "시간대 밖 · 대기 중" }
+        if cover.isCovered { return "Screens covered" }
+        if !settings.enabled { return "Off" }
+        if !sessionActive || sleeping { return "Sleeping · paused" }
+        if !schedule.active { return "Outside schedule · waiting" }
         if let next = schedule.nextCover {
             let formatter = DateFormatter()
             formatter.dateFormat = "HH:mm:ss"
-            return "켜짐 · 다음 가림 \(formatter.string(from: next))"
+            return "On · next cover \(formatter.string(from: next))"
         }
-        return "켜짐"
+        return "On"
     }
 
     private var awakeStatusText: String {
-        if !settings.awake.enabled { return "꺼짐" }
-        if !sessionActive || sleeping { return "잠자기 · 일시 중지" }
-        if !settings.awake.isWithinSchedule(at: Date()) { return "시간대 밖 · 대기 중" }
-        if let error = sleepPrevention.lastError { return "오류: \(error)" }
+        if !settings.awake.enabled { return "Off" }
+        if !sessionActive || sleeping { return "Sleeping · paused" }
+        if !settings.awake.isWithinSchedule(at: Date()) { return "Outside schedule · waiting" }
+        if let error = sleepPrevention.lastError { return "Error: \(error)" }
         if let deadline = settings.awake.expiresAt {
             let formatter = DateFormatter()
             formatter.dateFormat = "HH:mm:ss"
-            return "켜짐 · \(formatter.string(from: deadline)) 자동 종료"
+            return "On · stops at \(formatter.string(from: deadline))"
         }
-        return sleepPrevention.isRunning ? "켜짐" : "대기 중"
+        return sleepPrevention.isRunning ? "On" : "Waiting"
     }
 
     private var statusText: String {
-        "화면 보호: \(coverStatusText)\n잠자기 방지: \(awakeStatusText)"
+        "Screen protection: \(coverStatusText)\nKeep awake: \(awakeStatusText)"
     }
 
     private func refreshStatus() {
         guard let button = statusItem?.button else { return }
         let enabled = settings.iconFeaturesEnabled
-        let action = "\(settings.iconAction.title) \(enabled ? "끄기" : "켜기")"
+        let action = "\(enabled ? "Turn off" : "Turn on") \(settings.iconAction.title.lowercased())"
         button.image = NSImage(systemSymbolName: enabled ? "moon.fill" : "moon",
                                accessibilityDescription: "agenticnights")
         button.image?.isTemplate = true
         button.appearsDisabled = !enabled
-        button.toolTip = "\(statusText)\n클릭: \(action) · 우클릭 또는 ⌥클릭: 설정"
+        button.toolTip = "\(statusText)\nClick: \(action) · Right-click or ⌥-click: Settings"
         button.setAccessibilityLabel("agenticnights · \(action)")
         settingsWindow?.updateStatus(statusText, settings: settings)
         writeStatus()
@@ -204,30 +204,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        for title in ["화면 보호 · \(coverStatusText)", "잠자기 방지 · \(awakeStatusText)"] {
+        for title in ["Screen protection · \(coverStatusText)", "Keep awake · \(awakeStatusText)"] {
             let heading = menu.addItem(withTitle: title, action: nil, keyEquivalent: "")
             heading.isEnabled = false
         }
         menu.addItem(.separator())
-        let enable = menu.addItem(withTitle: "자동 화면 보호 켜기", action: #selector(toggleEnabled), keyEquivalent: "")
+        let enable = menu.addItem(withTitle: "Enable screen protection", action: #selector(toggleEnabled), keyEquivalent: "")
         enable.target = self
         enable.state = settings.enabled ? .on : .off
-        let awake = menu.addItem(withTitle: "잠자기 방지 켜기", action: #selector(toggleAwakeEnabled), keyEquivalent: "")
+        let awake = menu.addItem(withTitle: "Keep Mac awake", action: #selector(toggleAwakeEnabled), keyEquivalent: "")
         awake.target = self
         awake.state = settings.awake.enabled ? .on : .off
-        let now = menu.addItem(withTitle: "지금 가리기", action: #selector(showCover), keyEquivalent: "")
+        let now = menu.addItem(withTitle: "Cover now", action: #selector(showCover), keyEquivalent: "")
         now.target = self
-        let uncover = menu.addItem(withTitle: "가림 해제   ⌃⌥⌘B / 키 입력", action: #selector(hideCover), keyEquivalent: "")
+        let uncover = menu.addItem(withTitle: "Uncover   ⌃⌥⌘B / any key", action: #selector(hideCover), keyEquivalent: "")
         uncover.target = self
         if shortcut?.registrationStatus != noErr {
-            let warning = menu.addItem(withTitle: "단축키 등록 실패 · 메뉴에서 조작 가능", action: nil, keyEquivalent: "")
+            let warning = menu.addItem(withTitle: "Shortcut unavailable · use the menu", action: nil, keyEquivalent: "")
             warning.isEnabled = false
         }
         menu.addItem(.separator())
-        let preferences = menu.addItem(withTitle: "설정…", action: #selector(showSettings), keyEquivalent: ",")
+        let preferences = menu.addItem(withTitle: "Settings…", action: #selector(showSettings), keyEquivalent: ",")
         preferences.target = self
         menu.addItem(.separator())
-        menu.addItem(withTitle: "agenticnights 종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(withTitle: "Quit agenticnights", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     }
 
     @objc private func toggleEnabled() {

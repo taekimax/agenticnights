@@ -107,9 +107,9 @@ enum IconAction: String, Codable, CaseIterable, Sendable {
 
     var title: String {
         switch self {
-        case .cover: return "화면 보호"
-        case .awake: return "잠자기 방지"
-        case .both: return "화면 보호 + 잠자기 방지"
+        case .cover: return "Screen protection"
+        case .awake: return "Keep awake"
+        case .both: return "Screen protection + keep awake"
         }
     }
 }
