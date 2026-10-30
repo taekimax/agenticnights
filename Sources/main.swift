@@ -50,6 +50,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func iconClicked(_ button: NSStatusBarButton) {
+        let event = NSApp.currentEvent
+        let opensMenu = event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true ||
+            event?.modifierFlags.contains(.option) == true
+        guard opensMenu else {
+            var updated = settings
+            updated.toggleIconFeatures()
+            applySettings(updated)
+            return
+        }
         let menu = NSMenu()
         menu.autoenablesItems = false
         menu.delegate = self
@@ -173,13 +182,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func refreshStatus() {
         guard let button = statusItem?.button else { return }
-        let enabled = settings.enabled || settings.awake.enabled
+        let enabled = settings.iconFeaturesEnabled
         button.image = NSImage(systemSymbolName: enabled ? "moon.fill" : "moon",
                                accessibilityDescription: "agenticnights")
         button.image?.isTemplate = true
         button.appearsDisabled = !enabled
-        button.toolTip = tr("status.tooltip", ["status": statusText])
-        button.setAccessibilityLabel(tr("accessibility.status"))
+        let action = tr("icon.action", ["features": settings.iconAction.title])
+        button.toolTip = tr("status.tooltip", ["status": statusText]) + "\n" + action + " · " + tr("icon.menuHint")
+        button.setAccessibilityLabel("agenticnights · " + action)
         settingsWindow?.updateStatus(statusText, settings: settings)
         writeStatus()
     }
@@ -321,6 +331,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         merge(\.hideMenuBar)
         merge(\.dismissOnMouseMove)
         merge(\.shortcut)
+        merge(\.iconAction)
         merge(\.awake.enabled)
         merge(\.awake.timerEnabled)
         merge(\.awake.durationMinutes)
@@ -372,6 +383,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             "localizationWarnings": Localization.shared.warnings,
             "bundlePath": Bundle.main.bundlePath, "enabled": settings.enabled,
             "dismissOnMouseMove": settings.dismissOnMouseMove,
+            "iconAction": settings.iconAction.rawValue, "iconFeaturesEnabled": settings.iconFeaturesEnabled,
             "shortcut": settings.shortcut.displayName,
             "shortcutKeyCode": settings.shortcut.keyCode, "shortcutModifiers": settings.shortcut.modifiers,
             "intervalMinutes": settings.intervalMinutes, "scheduleEnabled": settings.scheduleEnabled,

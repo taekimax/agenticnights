@@ -50,7 +50,6 @@
   "status.coverHeading": "Screen blackout · {status}",
   "status.awakeHeading": "Sleep prevention · {status}",
   "status.tooltip": "{status}",
-  "accessibility.status": "agenticnights menu",
   "menu.interval": "Blackout interval: {minutes} min",
   "menu.minutes": "{minutes} min",
   "menu.customInterval": "Custom interval…",
@@ -66,5 +65,9 @@
   "settings.shortcutReset": "Default",
   "settings.shortcutHint": "⌘, ⌥ or ⌃ + A–Z, 0–9 or F1–F20. Esc cancels recording.",
   "settings.shortcutInvalid": "Use ⌘, ⌥ or ⌃ with A–Z, 0–9 or F1–F20.",
-  "settings.shortcutConflict": "Shortcut unavailable. Choose another combination."
+  "settings.shortcutConflict": "Shortcut unavailable. Choose another combination.",
+  "feature.both": "Both",
+  "settings.iconAction": "Left-click",
+  "icon.action": "Toggle {features}",
+  "icon.menuHint": "Right-click: menu"
 }

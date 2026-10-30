@@ -50,7 +50,6 @@
   "status.coverHeading": "화면 가리기 · {status}",
   "status.awakeHeading": "잠자기 방지 · {status}",
   "status.tooltip": "{status}",
-  "accessibility.status": "agenticnights 메뉴",
   "menu.interval": "화면 가리기 간격: {minutes}분",
   "menu.minutes": "{minutes}분",
   "menu.customInterval": "다른 간격…",
@@ -66,5 +65,9 @@
   "settings.shortcutReset": "기본값",
   "settings.shortcutHint": "⌘·⌥·⌃ 중 하나 + A–Z·0–9·F1–F20. Esc: 입력 취소.",
   "settings.shortcutInvalid": "⌘·⌥·⌃ 중 하나와 A–Z·0–9·F1–F20을 조합하세요.",
-  "settings.shortcutConflict": "사용할 수 없는 단축키입니다. 다른 조합을 선택하세요."
+  "settings.shortcutConflict": "사용할 수 없는 단축키입니다. 다른 조합을 선택하세요.",
+  "feature.both": "둘 다",
+  "settings.iconAction": "좌클릭",
+  "icon.action": "{features} 켜기/끄기",
+  "icon.menuHint": "우클릭: 메뉴"
 }

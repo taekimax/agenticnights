@@ -5,7 +5,7 @@
 ## English
 
 A macOS menu bar app for periodic screen blackout and automatic sleep prevention.
-**Version 1.3.1 (build 8) · macOS 13+ · English / Korean · MIT**
+**Version 1.3.2 (build 9) · macOS 13+ · English / Korean · MIT**
 
 ### Install
 
@@ -36,7 +36,11 @@ report untested behavior. Restore test settings. Do not edit code or Git.”
 
 ### Use
 
-Click the app's menu bar icon to open controls and Settings. Menu changes save immediately.
+Left-click the menu bar icon to turn the selected features on or off. In Settings,
+choose Screen blackout, Sleep prevention, or Both (default). If any selected feature
+is on, a click turns the selection off; otherwise it turns the selection on.
+Right-click opens the menu; Control-click or Option-click also works.
+Menu changes save immediately.
 Screen blackout and Sleep prevention start enabled; the blackout interval is 10 minutes.
 Mouse movement restores the screen by default. Daily schedules and auto-stop start disabled.
 
@@ -101,7 +105,7 @@ placeholders; validate UTF-8 JSON. Relaunch only if requested.”
 
 | Command | Checks |
 | --- | --- |
-| `./Scripts/test.sh` | 24 schedule/settings tests; 10 localization tests |
+| `./Scripts/test.sh` | 27 schedule/settings tests; 10 localization tests |
 | `./Scripts/test-interactions.sh` | 2 tests: in-process AppKit events and Carbon shortcut registration |
 | `./Scripts/build.sh` | Compile and verify the signed bundle; does not install |
 
@@ -124,7 +128,7 @@ original license. Keep both license files in distributions; the build includes t
 ## 한국어
 
 일정한 간격으로 화면을 가리고 자동 잠자기를 방지하는 macOS 메뉴 막대 앱입니다.
-**버전 1.3.1 (빌드 8) · macOS 13 이상 · 영어 / 한국어 · MIT**
+**버전 1.3.2 (빌드 9) · macOS 13 이상 · 영어 / 한국어 · MIT**
 
 ### 설치
 
@@ -155,7 +159,10 @@ AI 설치 지시: “이 README에 따라 저장소를 빌드·설치·실행하
 
 ### 사용
 
-메뉴 막대의 앱 아이콘을 클릭하면 기능과 설정을 엽니다. 메뉴에서 바꾼 값은 즉시 저장합니다.
+달 아이콘을 좌클릭하면 선택한 기능을 켜거나 끕니다. 설정에서 화면 가리기, 잠자기 방지,
+둘 다(기본값)를 선택하세요. 선택한 기능 중 하나라도 켜져 있으면 끄고, 모두 꺼져 있으면 켭니다.
+우클릭하면 메뉴를 엽니다. Control-클릭과 Option-클릭도 같은 메뉴를 엽니다.
+메뉴에서 바꾼 값은 즉시 저장합니다.
 기본값은 화면 가리기와 잠자기 방지 켜짐, 가림 간격 10분, 마우스 이동 해제 켜짐입니다.
 시간대 제한과 자동 종료 타이머는 처음에 꺼져 있습니다.
 
@@ -219,7 +226,7 @@ language.txt만 편집하고 기존 편집, 키와 플레이스홀더를 보존�
 
 | 명령 | 검사 |
 | --- | --- |
-| `./Scripts/test.sh` | 일정·설정 24개, 현지화 10개 |
+| `./Scripts/test.sh` | 일정·설정 27개, 현지화 10개 |
 | `./Scripts/test-interactions.sh` | 프로세스 내부 AppKit 이벤트와 Carbon 단축키 등록 2개 |
 | `./Scripts/build.sh` | 컴파일과 서명 검사; 설치는 별도 |
 

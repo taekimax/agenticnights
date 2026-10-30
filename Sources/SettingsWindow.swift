@@ -1,5 +1,9 @@
 import AppKit
 
+extension IconAction {
+    var title: String { tr("feature.\(rawValue)") }
+}
+
 final class SettingsWindow: NSWindowController, NSWindowDelegate {
     private let enabledButton = NSButton(checkboxWithTitle: tr("settings.enableCover"), target: nil, action: nil)
     private let intervalField = NSTextField(string: "10")
@@ -15,6 +19,7 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
     private let awakeStartPicker = NSDatePicker()
     private let awakeEndPicker = NSDatePicker()
     private let shortcutButton = NSButton()
+    private let iconActionPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private var editedShortcut = KeyboardShortcut.defaults
     private var keyMonitor: Any?
     private let statusLabel = NSTextField(wrappingLabelWithString: "")
@@ -40,6 +45,7 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
         // Reopening an already-visible settings window must preserve unsaved edits.
         if window?.isVisible != true {
             baseline = settings
+            iconActionPopup.selectItem(at: IconAction.allCases.firstIndex(of: settings.iconAction) ?? 2)
             editedShortcut = settings.shortcut
             updateShortcutTitle()
             enabledButton.state = settings.enabled ? .on : .off
@@ -112,6 +118,14 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
         stack.addArrangedSubview(statusLabel)
         statusLabel.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         statusLabel.heightAnchor.constraint(equalToConstant: 36).isActive = true
+
+        for action in IconAction.allCases {
+            iconActionPopup.addItem(withTitle: action.title)
+            iconActionPopup.lastItem?.representedObject = action.rawValue
+        }
+        iconActionPopup.setAccessibilityLabel(tr("settings.iconAction"))
+        stack.addArrangedSubview(row([NSTextField(labelWithString: tr("settings.iconAction")),
+                                     iconActionPopup, hint(tr("icon.menuHint"))]))
 
         for field in [intervalField, awakeDurationField] {
             field.alignment = .right
@@ -256,6 +270,8 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
             return
         }
         var settings = baseline
+        if let value = iconActionPopup.selectedItem?.representedObject as? String,
+           let action = IconAction(rawValue: value) { settings.iconAction = action }
         settings.shortcut = editedShortcut
         settings.enabled = enabledButton.state == .on
         settings.intervalMinutes = interval

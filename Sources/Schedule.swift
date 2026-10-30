@@ -102,6 +102,10 @@ extension AwakeSettings {
     }
 }
 
+enum IconAction: String, Codable, CaseIterable, Sendable {
+    case cover, awake, both
+}
+
 struct VeilSettings: Codable, Equatable, Sendable {
     var enabled = true
     var intervalMinutes = 10
@@ -110,10 +114,25 @@ struct VeilSettings: Codable, Equatable, Sendable {
     var endMinute = 7 * 60
     var hideMenuBar = true
     var awake = AwakeSettings.defaults
+    var iconAction = IconAction.both
     var dismissOnMouseMove = true
     var shortcut = KeyboardShortcut.defaults
 
     static let defaults = VeilSettings()
+
+    var iconFeaturesEnabled: Bool {
+        switch iconAction {
+        case .cover: return enabled
+        case .awake: return awake.enabled
+        case .both: return enabled || awake.enabled
+        }
+    }
+
+    mutating func toggleIconFeatures() {
+        let turnOn = !iconFeaturesEnabled
+        if iconAction != .awake { enabled = turnOn }
+        if iconAction != .cover { awake.enabled = turnOn }
+    }
 
     func validated() -> VeilSettings {
         var result = self
@@ -140,7 +159,7 @@ struct VeilSettings: Codable, Equatable, Sendable {
 
 extension VeilSettings {
     private enum CodingKeys: String, CodingKey {
-        case enabled, intervalMinutes, scheduleEnabled, startMinute, endMinute, hideMenuBar, awake, dismissOnMouseMove, shortcut
+        case enabled, intervalMinutes, scheduleEnabled, startMinute, endMinute, hideMenuBar, awake, iconAction, dismissOnMouseMove, shortcut
     }
 
     /// Preserve saved settings when a newer version adds an optional preference.
@@ -155,6 +174,7 @@ extension VeilSettings {
             hideMenuBar: try values.decodeIfPresent(Bool.self, forKey: .hideMenuBar) ?? Self.defaults.hideMenuBar
         )
         dismissOnMouseMove = try values.decodeIfPresent(Bool.self, forKey: .dismissOnMouseMove) ?? true
+        iconAction = try values.decodeIfPresent(IconAction.self, forKey: .iconAction) ?? .both
         shortcut = (try? values.decode(KeyboardShortcut.self, forKey: .shortcut)) ?? .defaults
         if let savedAwake = try values.decodeIfPresent(AwakeSettings.self, forKey: .awake) {
             awake = savedAwake
