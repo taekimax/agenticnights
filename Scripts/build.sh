@@ -13,6 +13,9 @@ xcrun swiftc -swift-version 5 -O -num-threads 2 \
 cp "$project_root/Resources/Info.plist" "$app_bundle/Contents/Info.plist"
 cp "$project_root/LICENSE" "$app_bundle/Contents/Resources/LICENSE"
 cp "$project_root/THIRD_PARTY_NOTICES.md" "$app_bundle/Contents/Resources/THIRD_PARTY_NOTICES.md"
+# Recreate only the generated resource directory so removed catalogs cannot linger.
+rm -rf "$app_bundle/Contents/Resources/Translations"
+cp -R "$project_root/Resources/Translations" "$app_bundle/Contents/Resources/Translations"
 chmod u+w "$app_bundle"
 codesign --force --sign - --identifier com.tk.agenticnights "$app_bundle"
 codesign --verify --deep --strict --verbose=2 "$app_bundle"

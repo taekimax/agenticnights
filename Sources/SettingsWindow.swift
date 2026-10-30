@@ -1,16 +1,20 @@
 import AppKit
 
+extension IconAction {
+    var title: String { tr("feature.\(rawValue)") }
+}
+
 final class SettingsWindow: NSWindowController, NSWindowDelegate {
-    private let enabledButton = NSButton(checkboxWithTitle: "Enable screen protection", target: nil, action: nil)
+    private let enabledButton = NSButton(checkboxWithTitle: tr("settings.enableCover"), target: nil, action: nil)
     private let intervalField = NSTextField(string: "10")
-    private let scheduleButton = NSButton(checkboxWithTitle: "Screen protection schedule", target: nil, action: nil)
-    private let hideMenuBarButton = NSButton(checkboxWithTitle: "Hide menu bar while covered", target: nil, action: nil)
+    private let scheduleButton = NSButton(checkboxWithTitle: tr("settings.coverSchedule"), target: nil, action: nil)
+    private let hideMenuBarButton = NSButton(checkboxWithTitle: tr("settings.hideMenuBar"), target: nil, action: nil)
     private let startPicker = NSDatePicker()
     private let endPicker = NSDatePicker()
-    private let awakeEnabledButton = NSButton(checkboxWithTitle: "Keep Mac awake", target: nil, action: nil)
-    private let awakeTimerButton = NSButton(checkboxWithTitle: "Stop after", target: nil, action: nil)
+    private let awakeEnabledButton = NSButton(checkboxWithTitle: tr("settings.enableAwake"), target: nil, action: nil)
+    private let awakeTimerButton = NSButton(checkboxWithTitle: tr("settings.stopAfter"), target: nil, action: nil)
     private let awakeDurationField = NSTextField(string: "60")
-    private let awakeScheduleButton = NSButton(checkboxWithTitle: "Keep awake schedule", target: nil, action: nil)
+    private let awakeScheduleButton = NSButton(checkboxWithTitle: tr("settings.awakeSchedule"), target: nil, action: nil)
     private let awakeStartPicker = NSDatePicker()
     private let awakeEndPicker = NSDatePicker()
     private let iconActionPopup = NSPopUpButton(frame: .zero, pullsDown: false)
@@ -22,7 +26,7 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
     init() {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 780, height: 600),
                               styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        window.title = "agenticnights Settings"
+        window.title = tr("settings.title")
         window.isReleasedWhenClosed = false
         super.init(window: window)
         window.delegate = self
@@ -84,7 +88,7 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
             stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -24),
             stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 24)
         ])
-        let title = NSTextField(labelWithString: "Screen protection and sleep prevention")
+        let title = NSTextField(labelWithString: tr("settings.heading"))
         title.font = .systemFont(ofSize: 20, weight: .semibold)
         stack.addArrangedSubview(title)
         statusLabel.textColor = .secondaryLabelColor
@@ -96,15 +100,15 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
             iconActionPopup.addItem(withTitle: action.title)
             iconActionPopup.lastItem?.representedObject = action.rawValue
         }
-        iconActionPopup.setAccessibilityLabel("Moon icon click action")
-        stack.addArrangedSubview(row([NSTextField(labelWithString: "Moon icon click"), iconActionPopup]))
+        iconActionPopup.setAccessibilityLabel(tr("accessibility.iconAction"))
+        stack.addArrangedSubview(row([NSTextField(labelWithString: tr("settings.iconAction")), iconActionPopup]))
 
         for field in [intervalField, awakeDurationField] {
             field.alignment = .right
             field.widthAnchor.constraint(equalToConstant: 60).isActive = true
         }
-        intervalField.setAccessibilityLabel("Cover interval, minutes")
-        awakeDurationField.setAccessibilityLabel("Keep awake duration, minutes")
+        intervalField.setAccessibilityLabel(tr("accessibility.interval"))
+        awakeDurationField.setAccessibilityLabel(tr("accessibility.duration"))
         for button in [scheduleButton, awakeScheduleButton, awakeTimerButton] {
             button.target = self
             button.action = #selector(scheduleChanged)
@@ -114,27 +118,27 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
             picker.datePickerElements = [.hourMinute]
             picker.locale = .current
         }
-        startPicker.setAccessibilityLabel("Screen protection start time")
-        endPicker.setAccessibilityLabel("Screen protection end time")
-        awakeStartPicker.setAccessibilityLabel("Keep awake start time")
-        awakeEndPicker.setAccessibilityLabel("Keep awake end time")
+        startPicker.setAccessibilityLabel(tr("accessibility.coverStart"))
+        endPicker.setAccessibilityLabel(tr("accessibility.coverEnd"))
+        awakeStartPicker.setAccessibilityLabel(tr("accessibility.awakeStart"))
+        awakeEndPicker.setAccessibilityLabel(tr("accessibility.awakeEnd"))
 
-        let coverBox = section("Screen protection", views: [
+        let coverBox = section(tr("feature.cover"), views: [
             enabledButton,
-            row([NSTextField(labelWithString: "Cover interval"), intervalField, NSTextField(labelWithString: "min")]),
+            row([NSTextField(labelWithString: tr("settings.interval")), intervalField, NSTextField(labelWithString: tr("settings.minutes"))]),
             scheduleButton,
-            row([NSTextField(labelWithString: "Start"), startPicker]),
-            row([NSTextField(labelWithString: "End"), endPicker]),
+            row([NSTextField(labelWithString: tr("settings.start")), startPicker]),
+            row([NSTextField(labelWithString: tr("settings.end")), endPicker]),
             hideMenuBarButton,
-            hint("Cover the screens after each interval.\nSwitch apps, click, or press a key to dismiss.")
+            hint(tr("settings.coverHint"))
         ])
-        let awakeBox = section("Keep awake", views: [
+        let awakeBox = section(tr("feature.awake"), views: [
             awakeEnabledButton,
-            row([awakeTimerButton, awakeDurationField, NSTextField(labelWithString: "min")]),
+            row([awakeTimerButton, awakeDurationField, NSTextField(labelWithString: tr("settings.minutes"))]),
             awakeScheduleButton,
-            row([NSTextField(labelWithString: "Start"), awakeStartPicker]),
-            row([NSTextField(labelWithString: "End"), awakeEndPicker]),
-            hint("Prevent automatic system and display sleep.\nThe timer starts when keep awake becomes active.\nPause outside the scheduled hours.")
+            row([NSTextField(labelWithString: tr("settings.start")), awakeStartPicker]),
+            row([NSTextField(labelWithString: tr("settings.end")), awakeEndPicker]),
+            hint(tr("settings.awakeHint"))
         ])
         let columns = NSStackView(views: [coverBox, awakeBox])
         columns.orientation = .horizontal
@@ -145,15 +149,15 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
         columns.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         coverBox.heightAnchor.constraint(equalTo: awakeBox.heightAnchor).isActive = true
 
-        stack.addArrangedSubview(hint("Click the moon to toggle the selected features; right-click for settings.\nValues: 1–1440 min · Equal start and end: all day · Cover / uncover: ⌃⌥⌘B"))
+        stack.addArrangedSubview(hint(tr("settings.footer")))
         errorLabel.textColor = .systemRed
         errorLabel.font = .systemFont(ofSize: 12)
         stack.addArrangedSubview(errorLabel)
         errorLabel.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
 
-        let cancel = NSButton(title: "Cancel", target: self, action: #selector(cancelChanges))
+        let cancel = NSButton(title: tr("settings.cancel"), target: self, action: #selector(cancelChanges))
         cancel.keyEquivalent = "\u{1b}"
-        let save = NSButton(title: "Apply settings", target: self, action: #selector(saveChanges))
+        let save = NSButton(title: tr("settings.apply"), target: self, action: #selector(saveChanges))
         save.bezelStyle = .rounded
         cancel.bezelStyle = .rounded
         save.keyEquivalent = "\r"
@@ -222,12 +226,12 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
     @objc private func saveChanges() {
         guard let interval = Int(intervalField.stringValue.trimmingCharacters(in: .whitespaces)),
               (1...1440).contains(interval) else {
-            errorLabel.stringValue = "Enter a whole number from 1 to 1440 for the cover interval."
+            errorLabel.stringValue = tr("settings.invalidInterval")
             return
         }
         let duration = Int(awakeDurationField.stringValue.trimmingCharacters(in: .whitespaces))
         if awakeTimerButton.state == .on && !(duration.map { (1...1440).contains($0) } ?? false) {
-            errorLabel.stringValue = "Enter a whole number from 1 to 1440 for the keep awake duration."
+            errorLabel.stringValue = tr("settings.invalidDuration")
             return
         }
         var settings = baseline

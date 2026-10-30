@@ -68,24 +68,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let main = NSMenu()
         let item = NSMenuItem()
         let appMenu = NSMenu(title: "agenticnights")
-        let coverItem = appMenu.addItem(withTitle: "Cover now", action: #selector(showCover), keyEquivalent: "")
+        let coverItem = appMenu.addItem(withTitle: tr("menu.cover"), action: #selector(showCover), keyEquivalent: "")
         coverItem.target = self
-        let hideItem = appMenu.addItem(withTitle: "Uncover", action: #selector(hideCover), keyEquivalent: "")
+        let hideItem = appMenu.addItem(withTitle: tr("menu.uncover"), action: #selector(hideCover), keyEquivalent: "")
         hideItem.target = self
-        let toggleItem = appMenu.addItem(withTitle: "Cover / uncover", action: #selector(toggleCover), keyEquivalent: "b")
+        let toggleItem = appMenu.addItem(withTitle: tr("menu.toggleCover"), action: #selector(toggleCover), keyEquivalent: "b")
         toggleItem.keyEquivalentModifierMask = [.control, .option, .command]
         toggleItem.target = self
-        let settingsItem = appMenu.addItem(withTitle: "Settings…", action: #selector(showSettings), keyEquivalent: ",")
+        let settingsItem = appMenu.addItem(withTitle: tr("menu.settings"), action: #selector(showSettings), keyEquivalent: ",")
         settingsItem.target = self
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Quit agenticnights", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: tr("menu.quit"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         item.submenu = appMenu
         main.addItem(item)
-        let editItem = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
-        let edit = NSMenu(title: "Edit")
-        for (title, action, key) in [("Undo", "undo:", "z"), ("Cut", "cut:", "x"),
-                                     ("Copy", "copy:", "c"), ("Paste", "paste:", "v"),
-                                     ("Select All", "selectAll:", "a")] {
+        let editItem = NSMenuItem(title: tr("menu.edit"), action: nil, keyEquivalent: "")
+        let edit = NSMenu(title: tr("menu.edit"))
+        for (title, action, key) in [(tr("menu.undo"), "undo:", "z"), (tr("menu.cut"), "cut:", "x"),
+                                     (tr("menu.copy"), "copy:", "c"), (tr("menu.paste"), "paste:", "v"),
+                                     (tr("menu.selectAll"), "selectAll:", "a")] {
             edit.addItem(withTitle: title, action: Selector(action), keyEquivalent: key)
         }
         editItem.submenu = edit
@@ -159,75 +159,76 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private var coverStatusText: String {
-        if cover.isCovered { return "Screens covered" }
-        if !settings.enabled { return "Off" }
-        if !sessionActive || sleeping { return "Sleeping · paused" }
-        if !schedule.active { return "Outside schedule · waiting" }
+        if cover.isCovered { return tr("status.covered") }
+        if !settings.enabled { return tr("status.off") }
+        if !sessionActive || sleeping { return tr("status.paused") }
+        if !schedule.active { return tr("status.outsideSchedule") }
         if let next = schedule.nextCover {
             let formatter = DateFormatter()
             formatter.dateFormat = "HH:mm:ss"
-            return "On · next cover \(formatter.string(from: next))"
+            return tr("status.nextCover", ["time": formatter.string(from: next)])
         }
-        return "On"
+        return tr("status.on")
     }
 
     private var awakeStatusText: String {
-        if !settings.awake.enabled { return "Off" }
-        if !sessionActive || sleeping { return "Sleeping · paused" }
-        if !settings.awake.isWithinSchedule(at: Date()) { return "Outside schedule · waiting" }
-        if let error = sleepPrevention.lastError { return "Error: \(error)" }
+        if !settings.awake.enabled { return tr("status.off") }
+        if !sessionActive || sleeping { return tr("status.paused") }
+        if !settings.awake.isWithinSchedule(at: Date()) { return tr("status.outsideSchedule") }
+        if let error = sleepPrevention.lastError { return tr("status.error", ["error": error]) }
         if let deadline = settings.awake.expiresAt {
             let formatter = DateFormatter()
             formatter.dateFormat = "HH:mm:ss"
-            return "On · stops at \(formatter.string(from: deadline))"
+            return tr("status.stopsAt", ["time": formatter.string(from: deadline)])
         }
-        return sleepPrevention.isRunning ? "On" : "Waiting"
+        return sleepPrevention.isRunning ? tr("status.on") : tr("status.waiting")
     }
 
     private var statusText: String {
-        "Screen protection: \(coverStatusText)\nKeep awake: \(awakeStatusText)"
+        tr("status.summary", ["cover": coverStatusText, "awake": awakeStatusText])
     }
 
     private func refreshStatus() {
         guard let button = statusItem?.button else { return }
         let enabled = settings.iconFeaturesEnabled
-        let action = "\(enabled ? "Turn off" : "Turn on") \(settings.iconAction.title.lowercased())"
+        let action = tr(enabled ? "action.turnOff" : "action.turnOn", ["features": settings.iconAction.title])
         button.image = NSImage(systemSymbolName: enabled ? "moon.fill" : "moon",
                                accessibilityDescription: "agenticnights")
         button.image?.isTemplate = true
         button.appearsDisabled = !enabled
-        button.toolTip = "\(statusText)\nClick: \(action) · Right-click or ⌥-click: Settings"
-        button.setAccessibilityLabel("agenticnights · \(action)")
+        button.toolTip = tr("status.tooltip", ["status": statusText, "action": action])
+        button.setAccessibilityLabel(tr("accessibility.status", ["action": action]))
         settingsWindow?.updateStatus(statusText, settings: settings)
         writeStatus()
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        for title in ["Screen protection · \(coverStatusText)", "Keep awake · \(awakeStatusText)"] {
+        for title in [tr("status.coverHeading", ["status": coverStatusText]),
+                      tr("status.awakeHeading", ["status": awakeStatusText])] {
             let heading = menu.addItem(withTitle: title, action: nil, keyEquivalent: "")
             heading.isEnabled = false
         }
         menu.addItem(.separator())
-        let enable = menu.addItem(withTitle: "Enable screen protection", action: #selector(toggleEnabled), keyEquivalent: "")
+        let enable = menu.addItem(withTitle: tr("settings.enableCover"), action: #selector(toggleEnabled), keyEquivalent: "")
         enable.target = self
         enable.state = settings.enabled ? .on : .off
-        let awake = menu.addItem(withTitle: "Keep Mac awake", action: #selector(toggleAwakeEnabled), keyEquivalent: "")
+        let awake = menu.addItem(withTitle: tr("settings.enableAwake"), action: #selector(toggleAwakeEnabled), keyEquivalent: "")
         awake.target = self
         awake.state = settings.awake.enabled ? .on : .off
-        let now = menu.addItem(withTitle: "Cover now", action: #selector(showCover), keyEquivalent: "")
+        let now = menu.addItem(withTitle: tr("menu.cover"), action: #selector(showCover), keyEquivalent: "")
         now.target = self
-        let uncover = menu.addItem(withTitle: "Uncover   ⌃⌥⌘B / any key", action: #selector(hideCover), keyEquivalent: "")
+        let uncover = menu.addItem(withTitle: tr("menu.uncoverHint"), action: #selector(hideCover), keyEquivalent: "")
         uncover.target = self
         if shortcut?.registrationStatus != noErr {
-            let warning = menu.addItem(withTitle: "Shortcut unavailable · use the menu", action: nil, keyEquivalent: "")
+            let warning = menu.addItem(withTitle: tr("menu.shortcutUnavailable"), action: nil, keyEquivalent: "")
             warning.isEnabled = false
         }
         menu.addItem(.separator())
-        let preferences = menu.addItem(withTitle: "Settings…", action: #selector(showSettings), keyEquivalent: ",")
+        let preferences = menu.addItem(withTitle: tr("menu.settings"), action: #selector(showSettings), keyEquivalent: ",")
         preferences.target = self
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Quit agenticnights", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(withTitle: tr("menu.quit"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     }
 
     @objc private func toggleEnabled() {
@@ -324,6 +325,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         var state: [String: Any] = [
             "running": running, "pid": ProcessInfo.processInfo.processIdentifier,
+            "uiLanguage": Localization.shared.language,
+            "translationDirectory": Localization.shared.directory.path,
+            "localizationWarnings": Localization.shared.warnings,
             "bundlePath": Bundle.main.bundlePath, "enabled": settings.enabled,
             "iconAction": settings.iconAction.rawValue, "iconFeaturesEnabled": settings.iconFeaturesEnabled,
             "intervalMinutes": settings.intervalMinutes, "scheduleEnabled": settings.scheduleEnabled,

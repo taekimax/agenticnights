@@ -60,7 +60,7 @@ final class CoverController {
             window.isReleasedWhenClosed = false
             window.animationBehavior = .none
             window.isRestorable = false
-            window.title = "agenticnights — Screen cover"
+            window.title = tr("cover.title")
             window.contentView = BlackView(frame: NSRect(origin: .zero, size: screen.frame.size))
             window.dismiss = { [weak self] in self?.hide(restorePrevious: true) }
             windows.append(window)

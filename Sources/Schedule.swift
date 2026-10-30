@@ -104,14 +104,6 @@ extension AwakeSettings {
 
 enum IconAction: String, Codable, CaseIterable, Sendable {
     case cover, awake, both
-
-    var title: String {
-        switch self {
-        case .cover: return "Screen protection"
-        case .awake: return "Keep awake"
-        case .both: return "Screen protection + keep awake"
-        }
-    }
 }
 
 struct VeilSettings: Codable, Equatable, Sendable {
