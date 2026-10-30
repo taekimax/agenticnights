@@ -1,9 +1,7 @@
 # Third-party notices
 
-agenticnights is released under the MIT License in [LICENSE](LICENSE).
-The following attribution and license must also be retained when distributing
-copies or substantial portions of the corresponding adapted code, including
-binary distributions of agenticnights.
+agenticnights uses the [MIT license](LICENSE). Retain the notice below with
+redistributed code and binaries.
 
 ## KeepingYouAwake
 
@@ -16,13 +14,9 @@ binary distributions of agenticnights.
 - Reviewed revision: `2be93dd7f390b23fbca934ff3b1ac03468a80077`
   (source and license checked 2026-10-30).
 
-The process-lifetime `caffeinate -di -w <pid>` approach and its start/stop
-lifecycle were adapted into Swift using Foundation `Process`. agenticnights
-implements its own screen covers, settings, schedules and finite-timer handling.
-It does not bundle KeepingYouAwake's application, icons, updater, or dependencies.
-The original source file carries the notice
-`Copyright (c) 2014 Marcel Dierkes. All rights reserved.`; the repository's MIT
-grant and copyright notice are reproduced verbatim below.
+`Sources/SleepPrevention.swift` adapts the `caffeinate -di -w <pid>` lifecycle
+from KeepingYouAwake to Swift `Process`. The original source notice is
+`Copyright (c) 2014 Marcel Dierkes. All rights reserved.`
 
 ### KeepingYouAwake license text
 
@@ -52,9 +46,5 @@ SOFTWARE.
 
 ## Platform components
 
-AppKit, Foundation, Carbon, OSLog, SF Symbols supplied by the system, and
-`/usr/bin/caffeinate` are provided by macOS or Apple's development tools.
-Their implementations and the `caffeinate` executable are not copied into this
-repository or app bundle. This project's MIT license does not relicense those
-platform components. No third-party package manager or bundled external library
-is required to build agenticnights.
+AppKit, Foundation, Carbon, OSLog, SF Symbols and `/usr/bin/caffeinate` are macOS
+components. Their licenses are separate from this project's MIT license.

@@ -59,16 +59,15 @@ final class Localization {
             overlay(translated, english: english)
         }
         if let url = custom[language], let translated = readCatalog(url) {
-            // v1.2 exported full bundled catalogs without recording which values
-            // were defaults. Recognize those exact values without rewriting user
-            // files. Any value edited away from the shipped default still wins.
-            let legacyURL = resources.appendingPathComponent("legacy-v1.2.json")
-            let legacy = (try? Data(contentsOf: legacyURL)).flatMap {
-                try? JSONDecoder().decode([String: [String: String]].self, from: $0)
-            }?[language] ?? [:]
+            // Recognize previously exported defaults without rewriting user files.
+            let legacy = ["legacy-v1.2.json", "legacy-v1.3.json"].compactMap { filename in
+                (try? Data(contentsOf: resources.appendingPathComponent(filename))).flatMap {
+                    try? JSONDecoder().decode([String: [String: String]].self, from: $0)
+                }?[language]
+            }
             overlay(translated.filter { key, value in
                 guard let text = value as? String else { return true }
-                return legacy[key] != text
+                return !legacy.contains { $0[key] == text }
             }, english: english)
         }
     }

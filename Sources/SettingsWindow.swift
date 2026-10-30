@@ -24,7 +24,7 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
     var onRecordingChanged: ((Bool) -> Void)?
 
     init() {
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 780, height: 680),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 780, height: 600),
                               styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.title = tr("settings.title")
         window.isReleasedWhenClosed = false
@@ -107,15 +107,11 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
             stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -24),
             stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 24)
         ])
-        let title = NSTextField(labelWithString: tr("settings.heading"))
-        title.font = .systemFont(ofSize: 20, weight: .semibold)
-        stack.addArrangedSubview(title)
         statusLabel.textColor = .secondaryLabelColor
         statusLabel.font = .systemFont(ofSize: 12)
         stack.addArrangedSubview(statusLabel)
         statusLabel.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         statusLabel.heightAnchor.constraint(equalToConstant: 36).isActive = true
-        stack.addArrangedSubview(hint(tr("settings.menuHint")))
 
         for field in [intervalField, awakeDurationField] {
             field.alignment = .right
@@ -123,7 +119,6 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
         }
         intervalField.setAccessibilityLabel(tr("accessibility.interval"))
         awakeDurationField.setAccessibilityLabel(tr("accessibility.duration"))
-        mouseMoveButton.toolTip = tr("settings.behaviorHint")
         for button in [scheduleButton, awakeScheduleButton, awakeTimerButton] {
             button.target = self
             button.action = #selector(scheduleChanged)

@@ -66,8 +66,10 @@ struct LocalizationTests {
             }
             let choice = try String(contentsOf: directory.appendingPathComponent("language.txt"), encoding: .utf8)
             try expect(choice.trimmingCharacters(in: .whitespacesAndNewlines) == "auto", "Default must follow system")
-            try expect(!FileManager.default.fileExists(atPath: directory.appendingPathComponent("legacy-v1.2.json").path),
-                       "Migration data must not be exported as a user language")
+            for filename in ["legacy-v1.2.json", "legacy-v1.3.json"] {
+                try expect(!FileManager.default.fileExists(atPath: directory.appendingPathComponent(filename).path),
+                           "Migration data must not be exported as a user language")
+            }
         }
     }
 
@@ -85,7 +87,7 @@ struct LocalizationTests {
             try expect(original.text("settings.cancel") == "Cancel", "Changes must wait for next launch")
             let restarted = try Localization(resources: resources, directory: directory, preferredLanguages: ["ko"])
             try expect(restarted.language == "de" && restarted.text("settings.cancel") == "Abbrechen", "Custom language must override system")
-            try expect(restarted.text("settings.apply") == "Apply settings", "Partial translations must use English fallback")
+            try expect(restarted.text("settings.apply") == original.text("settings.apply"), "Partial translations must use English fallback")
             try expect(restarted.text("status.summary", ["awake": "Ready", "cover": "Covered"]) == "Ready / Covered", "Translations must support reordered placeholders")
             try expect(restarted.text("status.error", ["error": "{awake} %s"]) == "100%: {awake} %s", "Values must be literal, not recursively substituted or printf-formatted")
             let after = try Data(contentsOf: url)
@@ -94,6 +96,8 @@ struct LocalizationTests {
     }
 
     static func invalidEntries() throws {
+        let english = try JSONDecoder().decode([String: String].self,
+            from: Data(contentsOf: resources.appendingPathComponent("en.json")))
         try withDirectory { directory in
             try write([
                 "settings.cancel": "Custom cancel",
@@ -105,9 +109,9 @@ struct LocalizationTests {
             try select("de", in: directory)
             let ui = try Localization(resources: resources, directory: directory, preferredLanguages: ["ko"])
             try expect(ui.text("settings.cancel") == "Custom cancel", "Valid neighboring entry must survive")
-            try expect(ui.text("settings.apply") == "Apply settings" && ui.text("status.off") == "Off", "Bad types and blank entries must fall back")
-            try expect(ui.text("status.nextCover", ["time": "22:00"]) == "On · next blackout 22:00", "Wrong placeholder must fall back")
-            try expect(ui.text("status.stopsAt", ["time": "23:00"]) == "On · stops at 23:00", "Missing placeholder must fall back")
+            try expect(ui.text("settings.apply") == english["settings.apply"] && ui.text("status.off") == english["status.off"], "Bad types and blank entries must fall back")
+            try expect(ui.text("status.nextCover", ["time": "22:00"]) == english["status.nextCover"]!.replacingOccurrences(of: "{time}", with: "22:00"), "Wrong placeholder must fall back")
+            try expect(ui.text("status.stopsAt", ["time": "23:00"]) == english["status.stopsAt"]!.replacingOccurrences(of: "{time}", with: "23:00"), "Missing placeholder must fall back")
             try expect(ui.warnings.count == 4, "Invalid entries must be reported")
         }
     }
@@ -173,28 +177,30 @@ struct LocalizationTests {
     }
 
     static func legacyUpgrade() throws {
-        let legacy = try JSONDecoder().decode([String: [String: String]].self,
-            from: Data(contentsOf: resources.appendingPathComponent("legacy-v1.2.json")))
-        for language in ["en", "ko"] {
-            try withDirectory { directory in
-                var oldCatalog = legacy[language]!
-                oldCatalog["settings.cancel"] = "My custom cancel"
-                let url = directory.appendingPathComponent("\(language).json")
-                try write(oldCatalog, to: url)
-                let original = try Data(contentsOf: url)
-                try select(language, in: directory)
-                let ui = try Localization(resources: resources, directory: directory)
-                let current = try JSONDecoder().decode([String: String].self,
-                    from: Data(contentsOf: resources.appendingPathComponent("\(language).json")))
-                try expect(ui.text("feature.cover") == current["feature.cover"], "Old feature names must update")
-                try expect(ui.text("settings.footer") == current["settings.footer"], "Obsolete click/shortcut instructions must update")
-                try expect(ui.text("status.tooltip", ["status": "Ready"]) == current["status.tooltip"]!.replacingOccurrences(of: "{status}", with: "Ready"),
-                           "Obsolete tooltip placeholders must not cause warnings or stale instructions")
-                try expect(ui.text("settings.dismissOnMouseMove") == current["settings.dismissOnMouseMove"], "New controls must use the selected language")
-                try expect(ui.text("settings.cancel") == "My custom cancel", "Existing user edits must survive")
-                try expect(ui.warnings.isEmpty, "Unedited legacy values must upgrade without warnings")
-                let after = try Data(contentsOf: url)
-                try expect(after == original, "Upgrade must preserve exact custom-file bytes")
+        for filename in ["legacy-v1.2.json", "legacy-v1.3.json"] {
+            let legacy = try JSONDecoder().decode([String: [String: String]].self,
+                from: Data(contentsOf: resources.appendingPathComponent(filename)))
+            for language in ["en", "ko"] {
+                try withDirectory { directory in
+                    var oldCatalog = legacy[language]!
+                    oldCatalog["settings.cancel"] = "My custom cancel"
+                    let url = directory.appendingPathComponent("\(language).json")
+                    try write(oldCatalog, to: url)
+                    let original = try Data(contentsOf: url)
+                    try select(language, in: directory)
+                    let ui = try Localization(resources: resources, directory: directory)
+                    let current = try JSONDecoder().decode([String: String].self,
+                        from: Data(contentsOf: resources.appendingPathComponent("\(language).json")))
+                    try expect(ui.text("feature.cover") == current["feature.cover"], "Old feature names must update")
+                    try expect(ui.text("settings.footer") == current["settings.footer"], "Obsolete click/shortcut instructions must update")
+                    try expect(ui.text("status.tooltip", ["status": "Ready"]) == current["status.tooltip"]!.replacingOccurrences(of: "{status}", with: "Ready"),
+                               "Obsolete tooltip placeholders must not cause warnings or stale instructions")
+                    try expect(ui.text("settings.dismissOnMouseMove") == current["settings.dismissOnMouseMove"], "New controls must use the selected language")
+                    try expect(ui.text("settings.cancel") == "My custom cancel", "Existing user edits must survive")
+                    try expect(ui.warnings.isEmpty, "Unedited legacy values must upgrade without warnings")
+                    let after = try Data(contentsOf: url)
+                    try expect(after == original, "Upgrade must preserve exact custom-file bytes")
+                }
             }
         }
     }
