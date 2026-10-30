@@ -1,14 +1,11 @@
 import AppKit
 
-extension IconAction {
-    var title: String { tr("feature.\(rawValue)") }
-}
-
 final class SettingsWindow: NSWindowController, NSWindowDelegate {
     private let enabledButton = NSButton(checkboxWithTitle: tr("settings.enableCover"), target: nil, action: nil)
     private let intervalField = NSTextField(string: "10")
     private let scheduleButton = NSButton(checkboxWithTitle: tr("settings.coverSchedule"), target: nil, action: nil)
     private let hideMenuBarButton = NSButton(checkboxWithTitle: tr("settings.hideMenuBar"), target: nil, action: nil)
+    private let mouseMoveButton = NSButton(checkboxWithTitle: tr("settings.dismissOnMouseMove"), target: nil, action: nil)
     private let startPicker = NSDatePicker()
     private let endPicker = NSDatePicker()
     private let awakeEnabledButton = NSButton(checkboxWithTitle: tr("settings.enableAwake"), target: nil, action: nil)
@@ -17,14 +14,17 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
     private let awakeScheduleButton = NSButton(checkboxWithTitle: tr("settings.awakeSchedule"), target: nil, action: nil)
     private let awakeStartPicker = NSDatePicker()
     private let awakeEndPicker = NSDatePicker()
-    private let iconActionPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let shortcutButton = NSButton()
+    private var editedShortcut = KeyboardShortcut.defaults
+    private var keyMonitor: Any?
     private let statusLabel = NSTextField(wrappingLabelWithString: "")
     private let errorLabel = NSTextField(wrappingLabelWithString: "")
     private var baseline = VeilSettings.defaults
-    var onSave: ((VeilSettings, VeilSettings) -> Void)?
+    var onSave: ((VeilSettings, VeilSettings) -> String?)?
+    var onRecordingChanged: ((Bool) -> Void)?
 
     init() {
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 780, height: 600),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 780, height: 680),
                               styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.title = tr("settings.title")
         window.isReleasedWhenClosed = false
@@ -40,11 +40,13 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
         // Reopening an already-visible settings window must preserve unsaved edits.
         if window?.isVisible != true {
             baseline = settings
-            iconActionPopup.selectItem(at: IconAction.allCases.firstIndex(of: settings.iconAction) ?? 2)
+            editedShortcut = settings.shortcut
+            updateShortcutTitle()
             enabledButton.state = settings.enabled ? .on : .off
             intervalField.stringValue = String(settings.intervalMinutes)
             scheduleButton.state = settings.scheduleEnabled ? .on : .off
             hideMenuBarButton.state = settings.hideMenuBar ? .on : .off
+            mouseMoveButton.state = settings.dismissOnMouseMove ? .on : .off
             startPicker.dateValue = date(for: settings.startMinute)
             endPicker.dateValue = date(for: settings.endMinute)
             awakeEnabledButton.state = settings.awake.enabled ? .on : .off
@@ -73,6 +75,23 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
             awakeEnabledButton.state = settings.awake.enabled ? .on : .off
             baseline.awake.enabled = settings.awake.enabled
         }
+        if intervalField.stringValue == String(baseline.intervalMinutes), window?.firstResponder !== intervalField.currentEditor() {
+            intervalField.stringValue = String(settings.intervalMinutes)
+            baseline.intervalMinutes = settings.intervalMinutes
+        }
+        if (mouseMoveButton.state == .on) == baseline.dismissOnMouseMove {
+            mouseMoveButton.state = settings.dismissOnMouseMove ? .on : .off
+            baseline.dismissOnMouseMove = settings.dismissOnMouseMove
+        }
+        if (awakeTimerButton.state == .on) == baseline.awake.timerEnabled {
+            awakeTimerButton.state = settings.awake.timerEnabled ? .on : .off
+            baseline.awake.timerEnabled = settings.awake.timerEnabled
+        }
+        if awakeDurationField.stringValue == String(baseline.awake.durationMinutes), window?.firstResponder !== awakeDurationField.currentEditor() {
+            awakeDurationField.stringValue = String(settings.awake.durationMinutes)
+            baseline.awake.durationMinutes = settings.awake.durationMinutes
+        }
+        updateScheduleControls()
     }
 
     private func buildContent() {
@@ -96,12 +115,7 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
         stack.addArrangedSubview(statusLabel)
         statusLabel.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         statusLabel.heightAnchor.constraint(equalToConstant: 36).isActive = true
-        for action in IconAction.allCases {
-            iconActionPopup.addItem(withTitle: action.title)
-            iconActionPopup.lastItem?.representedObject = action.rawValue
-        }
-        iconActionPopup.setAccessibilityLabel(tr("accessibility.iconAction"))
-        stack.addArrangedSubview(row([NSTextField(labelWithString: tr("settings.iconAction")), iconActionPopup]))
+        stack.addArrangedSubview(hint(tr("settings.menuHint")))
 
         for field in [intervalField, awakeDurationField] {
             field.alignment = .right
@@ -109,6 +123,7 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
         }
         intervalField.setAccessibilityLabel(tr("accessibility.interval"))
         awakeDurationField.setAccessibilityLabel(tr("accessibility.duration"))
+        mouseMoveButton.toolTip = tr("settings.behaviorHint")
         for button in [scheduleButton, awakeScheduleButton, awakeTimerButton] {
             button.target = self
             button.action = #selector(scheduleChanged)
@@ -130,6 +145,7 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
             row([NSTextField(labelWithString: tr("settings.start")), startPicker]),
             row([NSTextField(labelWithString: tr("settings.end")), endPicker]),
             hideMenuBarButton,
+            mouseMoveButton,
             hint(tr("settings.coverHint"))
         ])
         let awakeBox = section(tr("feature.awake"), views: [
@@ -149,6 +165,14 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
         columns.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         coverBox.heightAnchor.constraint(equalTo: awakeBox.heightAnchor).isActive = true
 
+        shortcutButton.bezelStyle = .rounded
+        shortcutButton.target = self
+        shortcutButton.action = #selector(recordShortcut)
+        shortcutButton.setAccessibilityLabel(tr("settings.shortcutRecord"))
+        let reset = NSButton(title: tr("settings.shortcutReset"), target: self, action: #selector(resetShortcut))
+        reset.bezelStyle = .rounded
+        stack.addArrangedSubview(row([NSTextField(labelWithString: tr("settings.shortcut")), shortcutButton, reset]))
+        stack.addArrangedSubview(hint(tr("settings.shortcutHint")))
         stack.addArrangedSubview(hint(tr("settings.footer")))
         errorLabel.textColor = .systemRed
         errorLabel.font = .systemFont(ofSize: 12)
@@ -224,6 +248,8 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
     }
 
     @objc private func saveChanges() {
+        stopRecording()
+        window?.makeFirstResponder(nil)
         guard let interval = Int(intervalField.stringValue.trimmingCharacters(in: .whitespaces)),
               (1...1440).contains(interval) else {
             errorLabel.stringValue = tr("settings.invalidInterval")
@@ -235,12 +261,12 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
             return
         }
         var settings = baseline
-        if let value = iconActionPopup.selectedItem?.representedObject as? String,
-           let action = IconAction(rawValue: value) { settings.iconAction = action }
+        settings.shortcut = editedShortcut
         settings.enabled = enabledButton.state == .on
         settings.intervalMinutes = interval
         settings.scheduleEnabled = scheduleButton.state == .on
         settings.hideMenuBar = hideMenuBarButton.state == .on
+        settings.dismissOnMouseMove = mouseMoveButton.state == .on
         settings.startMinute = minutes(from: startPicker.dateValue)
         settings.endMinute = minutes(from: endPicker.dateValue)
         settings.awake.enabled = awakeEnabledButton.state == .on
@@ -249,11 +275,62 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
         settings.awake.scheduleEnabled = awakeScheduleButton.state == .on
         settings.awake.startMinute = minutes(from: awakeStartPicker.dateValue)
         settings.awake.endMinute = minutes(from: awakeEndPicker.dateValue)
-        onSave?(settings, baseline)
+        if let error = onSave?(settings, baseline) {
+            errorLabel.stringValue = error
+            return
+        }
         close()
     }
 
     @objc private func cancelChanges() { close() }
+
+    override func close() {
+        stopRecording()
+        super.close()
+    }
+
+    func windowWillClose(_ notification: Notification) { stopRecording() }
+    func windowDidResignKey(_ notification: Notification) { stopRecording() }
+
+    private func updateShortcutTitle() {
+        shortcutButton.title = "\(editedShortcut.displayName)  \(tr("settings.shortcutRecord"))"
+    }
+
+    @objc private func resetShortcut() {
+        stopRecording()
+        editedShortcut = .defaults
+        updateShortcutTitle()
+        errorLabel.stringValue = ""
+    }
+
+    @objc private func recordShortcut() {
+        if keyMonitor != nil { stopRecording(); return }
+        window?.makeFirstResponder(shortcutButton)
+        errorLabel.stringValue = ""
+        shortcutButton.title = tr("settings.shortcutRecording")
+        onRecordingChanged?(true)
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, self.window?.isKeyWindow == true else { return event }
+            if event.keyCode == 53 { self.stopRecording(); return nil }
+            let proposed = KeyboardShortcut(event: event)
+            guard proposed.isValid else {
+                self.errorLabel.stringValue = tr("settings.shortcutInvalid")
+                return nil
+            }
+            self.editedShortcut = proposed
+            self.errorLabel.stringValue = ""
+            self.stopRecording()
+            return nil
+        }
+    }
+
+    private func stopRecording() {
+        guard let keyMonitor else { return }
+        NSEvent.removeMonitor(keyMonitor)
+        self.keyMonitor = nil
+        updateShortcutTitle()
+        onRecordingChanged?(false)
+    }
     private func date(for minute: Int) -> Date {
         Calendar.current.date(bySettingHour: minute / 60, minute: minute % 60,
                               second: 0, of: Date()) ?? Date()

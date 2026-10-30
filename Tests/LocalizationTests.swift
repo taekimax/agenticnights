@@ -34,6 +34,8 @@ struct LocalizationTests {
             ("malformed catalogs recover without overwriting user data", malformedCatalog),
             ("explicit language, regional fallback and unsupported language", languageSelection),
             ("new English keys remain available after an upgrade", upgrade),
+            ("legacy defaults update without changing custom translation files", legacyUpgrade),
+            ("partial Korean files fall back to current Korean text", partialKorean),
             ("bundled UI works when app data cannot be created", unavailableDirectory),
         ]
         for (name, test) in tests { try test(); print("PASS: \(name)") }
@@ -64,6 +66,8 @@ struct LocalizationTests {
             }
             let choice = try String(contentsOf: directory.appendingPathComponent("language.txt"), encoding: .utf8)
             try expect(choice.trimmingCharacters(in: .whitespacesAndNewlines) == "auto", "Default must follow system")
+            try expect(!FileManager.default.fileExists(atPath: directory.appendingPathComponent("legacy-v1.2.json").path),
+                       "Migration data must not be exported as a user language")
         }
     }
 
@@ -102,7 +106,7 @@ struct LocalizationTests {
             let ui = try Localization(resources: resources, directory: directory, preferredLanguages: ["ko"])
             try expect(ui.text("settings.cancel") == "Custom cancel", "Valid neighboring entry must survive")
             try expect(ui.text("settings.apply") == "Apply settings" && ui.text("status.off") == "Off", "Bad types and blank entries must fall back")
-            try expect(ui.text("status.nextCover", ["time": "22:00"]) == "On · next cover 22:00", "Wrong placeholder must fall back")
+            try expect(ui.text("status.nextCover", ["time": "22:00"]) == "On · next blackout 22:00", "Wrong placeholder must fall back")
             try expect(ui.text("status.stopsAt", ["time": "23:00"]) == "On · stops at 23:00", "Missing placeholder must fall back")
             try expect(ui.warnings.count == 4, "Invalid entries must be reported")
         }
@@ -165,6 +169,53 @@ struct LocalizationTests {
             let ui = try Localization(resources: resources, directory: blocked, preferredLanguages: ["ko-KR"])
             try expect(ui.language == "ko" && ui.text("settings.cancel") != "Cancel", "Bundled UI must work without writable app data")
             try expect(!ui.warnings.isEmpty, "App data failure must be reported")
+        }
+    }
+
+    static func legacyUpgrade() throws {
+        let legacy = try JSONDecoder().decode([String: [String: String]].self,
+            from: Data(contentsOf: resources.appendingPathComponent("legacy-v1.2.json")))
+        for language in ["en", "ko"] {
+            try withDirectory { directory in
+                var oldCatalog = legacy[language]!
+                oldCatalog["settings.cancel"] = "My custom cancel"
+                let url = directory.appendingPathComponent("\(language).json")
+                try write(oldCatalog, to: url)
+                let original = try Data(contentsOf: url)
+                try select(language, in: directory)
+                let ui = try Localization(resources: resources, directory: directory)
+                let current = try JSONDecoder().decode([String: String].self,
+                    from: Data(contentsOf: resources.appendingPathComponent("\(language).json")))
+                try expect(ui.text("feature.cover") == current["feature.cover"], "Old feature names must update")
+                try expect(ui.text("settings.footer") == current["settings.footer"], "Obsolete click/shortcut instructions must update")
+                try expect(ui.text("status.tooltip", ["status": "Ready"]) == current["status.tooltip"]!.replacingOccurrences(of: "{status}", with: "Ready"),
+                           "Obsolete tooltip placeholders must not cause warnings or stale instructions")
+                try expect(ui.text("settings.dismissOnMouseMove") == current["settings.dismissOnMouseMove"], "New controls must use the selected language")
+                try expect(ui.text("settings.cancel") == "My custom cancel", "Existing user edits must survive")
+                try expect(ui.warnings.isEmpty, "Unedited legacy values must upgrade without warnings")
+                let after = try Data(contentsOf: url)
+                try expect(after == original, "Upgrade must preserve exact custom-file bytes")
+            }
+        }
+    }
+
+    static func partialKorean() throws {
+        try withDirectory { directory in
+            let url = directory.appendingPathComponent("ko.json")
+            try write([
+                "settings.cancel": "내 취소",
+                "settings.shortcut": 42,
+                "status.nextCover": "잘못된 {placeholder}",
+            ], to: url)
+            try select("ko", in: directory)
+            let ui = try Localization(resources: resources, directory: directory)
+            let korean = try JSONDecoder().decode([String: String].self,
+                from: Data(contentsOf: resources.appendingPathComponent("ko.json")))
+            try expect(ui.text("settings.cancel") == "내 취소", "A custom Korean label must win")
+            for key in ["settings.shortcut", "settings.dismissOnMouseMove", "status.nextCover"] {
+                try expect(ui.text(key) == korean[key], "Missing or invalid Korean entries must use bundled Korean: \(key)")
+            }
+            try expect(ui.warnings.count == 2, "Invalid custom entries must still be reported")
         }
     }
 }

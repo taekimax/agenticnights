@@ -53,16 +53,32 @@ final class Localization {
             warnings.append("Requested language is unavailable; using English.")
         }
 
-        // A malformed custom file uses its bundled language, if present. A valid
-        // partial file falls back per entry to canonical English, including new keys.
-        var translated: [String: Any]?
-        if let url = custom[language] { translated = readCatalog(url) }
-        if translated == nil, let url = bundled[language] { translated = readCatalog(url) }
+        // New or invalid entries use the selected bundled language before English,
+        // so an older Korean file cannot turn new controls into English controls.
+        if let url = bundled[language], let translated = readCatalog(url) {
+            overlay(translated, english: english)
+        }
+        if let url = custom[language], let translated = readCatalog(url) {
+            // v1.2 exported full bundled catalogs without recording which values
+            // were defaults. Recognize those exact values without rewriting user
+            // files. Any value edited away from the shipped default still wins.
+            let legacyURL = resources.appendingPathComponent("legacy-v1.2.json")
+            let legacy = (try? Data(contentsOf: legacyURL)).flatMap {
+                try? JSONDecoder().decode([String: [String: String]].self, from: $0)
+            }?[language] ?? [:]
+            overlay(translated.filter { key, value in
+                guard let text = value as? String else { return true }
+                return legacy[key] != text
+            }, english: english)
+        }
+    }
+
+    private func overlay(_ translated: [String: Any], english: [String: String]) {
         for (key, source) in english {
-            guard let value = translated?[key] else { continue }
+            guard let value = translated[key] else { continue }
             guard let text = value as? String, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   Self.tokens(in: text) == Self.tokens(in: source) else {
-                warnings.append("Invalid translation for \(key); using English.")
+                warnings.append("Invalid translation for \(key); using bundled text.")
                 continue
             }
             strings[key] = text

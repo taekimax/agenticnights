@@ -102,10 +102,6 @@ extension AwakeSettings {
     }
 }
 
-enum IconAction: String, Codable, CaseIterable, Sendable {
-    case cover, awake, both
-}
-
 struct VeilSettings: Codable, Equatable, Sendable {
     var enabled = true
     var intervalMinutes = 10
@@ -114,25 +110,10 @@ struct VeilSettings: Codable, Equatable, Sendable {
     var endMinute = 7 * 60
     var hideMenuBar = true
     var awake = AwakeSettings.defaults
-    var iconAction = IconAction.both
+    var dismissOnMouseMove = true
+    var shortcut = KeyboardShortcut.defaults
 
     static let defaults = VeilSettings()
-
-    var iconFeaturesEnabled: Bool {
-        switch iconAction {
-        case .cover: return enabled
-        case .awake: return awake.enabled
-        case .both: return enabled || awake.enabled
-        }
-    }
-
-    mutating func toggleIconFeatures() {
-        // If any selected feature is on, one click stops the selected group.
-        // Features outside the selected group keep their existing state.
-        let turnOn = !iconFeaturesEnabled
-        if iconAction != .awake { enabled = turnOn }
-        if iconAction != .cover { awake.enabled = turnOn }
-    }
 
     func validated() -> VeilSettings {
         var result = self
@@ -140,6 +121,7 @@ struct VeilSettings: Codable, Equatable, Sendable {
         result.startMinute = min(max(startMinute, 0), 1_439)
         result.endMinute = min(max(endMinute, 0), 1_439)
         result.awake = awake.validated()
+        if !shortcut.isValid { result.shortcut = .defaults }
         return result
     }
 
@@ -158,7 +140,7 @@ struct VeilSettings: Codable, Equatable, Sendable {
 
 extension VeilSettings {
     private enum CodingKeys: String, CodingKey {
-        case enabled, intervalMinutes, scheduleEnabled, startMinute, endMinute, hideMenuBar, awake, iconAction
+        case enabled, intervalMinutes, scheduleEnabled, startMinute, endMinute, hideMenuBar, awake, dismissOnMouseMove, shortcut
     }
 
     /// Preserve saved settings when a newer version adds an optional preference.
@@ -172,7 +154,8 @@ extension VeilSettings {
             endMinute: try values.decodeIfPresent(Int.self, forKey: .endMinute) ?? Self.defaults.endMinute,
             hideMenuBar: try values.decodeIfPresent(Bool.self, forKey: .hideMenuBar) ?? Self.defaults.hideMenuBar
         )
-        iconAction = try values.decodeIfPresent(IconAction.self, forKey: .iconAction) ?? .both
+        dismissOnMouseMove = try values.decodeIfPresent(Bool.self, forKey: .dismissOnMouseMove) ?? true
+        shortcut = (try? values.decode(KeyboardShortcut.self, forKey: .shortcut)) ?? .defaults
         if let savedAwake = try values.decodeIfPresent(AwakeSettings.self, forKey: .awake) {
             awake = savedAwake
         } else {

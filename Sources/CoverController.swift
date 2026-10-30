@@ -2,6 +2,8 @@ import AppKit
 
 final class BlackWindow: NSWindow {
     var dismiss: (() -> Void)?
+    var dismissOnMouseMove = true
+    var shownAt = ProcessInfo.processInfo.systemUptime
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
 
@@ -12,6 +14,18 @@ final class BlackWindow: NSWindow {
 
     override func mouseDown(with event: NSEvent) { dismiss?() }
     override func rightMouseDown(with event: NSEvent) { dismiss?() }
+    override func otherMouseDown(with event: NSEvent) { dismiss?() }
+
+    override func sendEvent(_ event: NSEvent) {
+        // Ignore events queued before the cover was shown. Only cover windows
+        // receive movement; there is no global event tap or background polling.
+        if dismissOnMouseMove, event.timestamp >= shownAt,
+           [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged].contains(event.type) {
+            dismiss?()
+            return
+        }
+        super.sendEvent(event)
+    }
 }
 
 final class BlackView: NSView {
@@ -29,6 +43,7 @@ final class CoverController {
     private var isUpdating = false
     private(set) var isCovered = false
     var hideMenuBar = true
+    var dismissOnMouseMove = true
     var onChange: (() -> Void)?
 
     func show() {
@@ -60,6 +75,8 @@ final class CoverController {
             window.isReleasedWhenClosed = false
             window.animationBehavior = .none
             window.isRestorable = false
+            window.dismissOnMouseMove = dismissOnMouseMove
+            window.acceptsMouseMovedEvents = dismissOnMouseMove
             window.title = tr("cover.title")
             window.contentView = BlackView(frame: NSRect(origin: .zero, size: screen.frame.size))
             window.dismiss = { [weak self] in self?.hide(restorePrevious: true) }

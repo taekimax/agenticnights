@@ -5,10 +5,10 @@
 ## English
 
 Keep your Mac awake and cover its displays with black windows at regular intervals.
-agenticnights is a small macOS menu bar app with independent screen protection and
+agenticnights is a small macOS menu bar app with independent screen blackout and
 sleep prevention controls, daily schedules, and an optional auto-stop timer.
 
-**Version 1.2.0 · macOS 13 or later · English and Korean included · MIT license**
+**Version 1.3.0 · macOS 13 or later · English and Korean included · MIT license**
 
 The interface follows your macOS language by default. You or an AI agent can add
 other languages by editing translation files in app data, without rebuilding the app.
@@ -64,8 +64,9 @@ the installer's quit-and-backup procedure and preserve my settings and data.
 Use the app defaults unless I have requested specific settings.
 
 Verify the installed signature, staged/installed file equality, and actual running
-app path. Check the moon icon, selected click action, toggles, settings, saving,
-cancellation, and persistence after relaunch. Restore settings changed for testing.
+app path. Check the moon menu, quick controls, mouse-movement option, shortcut
+recording, saving, cancellation, and persistence after relaunch. Distinguish
+in-process event tests from physical input checks. Restore settings changed for testing.
 Distinguish the app's own caffeinate process from other sleep prevention tools.
 If needed, use a bounded sleep assertion and stop only the one you started.
 
@@ -77,41 +78,51 @@ Remove temporary verification files; preserve recovery copies and useful caches.
 
 ### Use
 
-The menu bar shows one moon icon. In **Settings**, choose what clicking it controls.
-The control names below use the English translation:
+Click the moon in the menu bar to open the controls and **Settings…**. Left-click,
+right-click, and modifier-click all open the same menu. A filled moon means at
+least one feature is enabled; the menu and tooltip show each feature's current
+status. Upgrades preserve enabled features and other compatible settings; the old
+click-action choice is no longer used.
 
-| Choice | Moon icon click |
+| Menu control | Effect |
 | --- | --- |
-| Screen protection | Toggle automatic screen covers |
-| Keep awake | Toggle sleep prevention |
-| Screen protection + keep awake (default) | Toggle both features |
+| Enable screen blackout / Keep Mac awake | Toggle either feature independently |
+| Blackout interval | Choose 5, 10, 15, 30, or 60 minutes; Custom interval opens Settings |
+| Restore screen on mouse movement | Turn movement dismissal on or off |
+| Auto-stop keep awake | Choose Until turned off, or 30, 60, or 120 minutes; does not turn Keep awake on or off |
+| Black out now / Restore screen | Show or dismiss the black windows |
+| Shortcut / Settings… | Open Settings to edit the shortcut, custom durations, and daily schedules |
 
-If any selected feature is enabled, clicking turns the selected features off;
-otherwise, it enables them. Unselected features are unchanged. Changing the click
-action alone does not toggle features or restart timers. A filled moon means at
-least one selected feature is enabled; hover over it for the current status.
-Right-click, Control-click, or Option-click opens the settings and manual controls.
-
-- **Screen protection** starts enabled, with a 10-minute interval and no daily
-  time restriction. The first cover appears after one full interval. A manual
-  cover restarts the interval while automatic screen protection is active.
+- **Screen blackout** starts enabled, with a 10-minute interval and no daily
+  time restriction. The first blackout appears after one full interval. A manual
+  blackout restarts the interval while automatic blackout is active.
 - **Keep awake** independently prevents automatic system and display sleep. It
   starts enabled, with no timer or daily time restriction. The optional auto-stop
   timer accepts 1–1440 minutes and starts when sleep prevention becomes active.
   It keeps counting outside scheduled hours and while the app is closed. Expiry
-  turns Keep awake off. Relaunching, waking the Mac, or changing screen protection
+  turns Keep awake off. Relaunching, waking the Mac, or changing blackout settings
   does not extend the deadline. Turning Keep awake off and on, changing the timer
   duration, or toggling timer use starts a new timer when active.
+- Moving the mouse or trackpad restores the screen by default. Disable **Restore
+  screen on mouse movement** in the menu or Settings to keep the blackout until
+  you click, press a key, use the shortcut, or switch apps. The dismissing key is
+  not sent to the previous app. This option controls the app's black windows;
+  waking from actual system or display sleep remains macOS behavior.
+- **Control+Option+Command+B** is the default global blackout shortcut. In Settings,
+  click **Change…** and press a combination containing Command, Option, or Control
+  with A–Z, 0–9, or F1–F20; Shift is optional. Shortcuts use physical key positions
+  labeled with the US keyboard layout. Press Escape to cancel recording. **Use
+  default** restores the default combination in the draft. Click **Apply settings**
+  to save. If a combination is unavailable, the window stays open and the saved
+  shortcut and settings remain unchanged.
 - Daily schedules use local time, include the start, and exclude the end. Overnight
   ranges such as `22:00–07:00` work; equal start and end times mean all day.
-- The menu bar is hidden during a cover by default. This can be disabled in
+- The menu bar is hidden during a blackout by default. This can be disabled in
   Settings. The previous menu bar and Dock presentation is restored afterward.
-- Use **Cover now**, **Uncover**, or **Control+Option+Command+B** for manual control.
-  A key press or mouse click dismisses a cover; the key is not sent to the previous
-  app. Switching to another app also dismisses it. Manual covers do not toggle Keep awake.
-- Covers use normal window level. Automatic covers are skipped while Settings
-  is open. Canceling or closing Settings preserves saved values, and app updates
-  retain compatible saved settings.
+- Blackout windows use normal window level. Automatic blackouts are skipped while
+  Settings or the menu is open. Canceling or closing Settings preserves saved
+  values. Quick menu changes apply immediately, and manual blackout does not
+  toggle Keep awake.
 - Quitting stops only this app's `caffeinate` process. It does not change permanent
   system sleep settings or other apps' sleep assertions.
 
@@ -146,13 +157,17 @@ when the app launches; there is no language selector in Settings.
 
 Do not edit the signed app bundle or Swift files to translate the interface. App
 data changes need no rebuild or signature changes. Existing custom files are never
-overwritten by the app, including during upgrades. New keys use bundled English
-until you add their translations; use the current canonical English file as your
-reference when updating a translation.
+overwritten by the app, including during upgrades. Use the current canonical
+English file as your reference when updating a translation; an existing app-data
+copy may lack newer keys.
 
-Missing or invalid individual entries fall back to bundled English. If an entire
-JSON file is invalid, the app uses the bundled translation for the selected language
-when available, otherwise English. The local status snapshot exposes `uiLanguage`,
+Missing or invalid entries, including new keys, use the current bundled translation
+for the selected language when available, then English. The same fallback applies
+when a whole JSON file is invalid. Exact default values exported by v1.2 use updated
+bundled wording; values edited away from those defaults remain custom overrides.
+This migration never rewrites the user's translation files. The bundled
+`legacy-v1.2.json` records old defaults and is not a selectable language or exported
+editable catalog. The local status snapshot exposes `uiLanguage`,
 `translationDirectory`, and `localizationWarnings` to help diagnose the selection.
 
 #### Translate with an AI agent
@@ -176,17 +191,20 @@ files changed, validation results, and whether relaunch verification was perform
 ### Development and tests
 
 Run `./Scripts/test.sh` and `./Scripts/build.sh` from the repository root. The test
-script runs both the schedule and localization suites. The **25 schedule tests**
-cover schedule boundaries, overnight ranges, daylight-saving
-time, timer expiry/persistence, settings compatibility, independent feature
-toggles, and icon action selection. That suite reports `PASS: 25 schedule tests`.
-Separate localization tests check language selection, editable translation data,
-fallback behavior, and placeholder validation.
+script runs **24 schedule/settings tests** and **10 localization tests**. These
+cover schedule boundaries, overnight ranges, daylight-saving time, timer
+expiry/persistence, settings migration, independent features, mouse-movement and
+shortcut preferences, language selection, translation upgrades, and placeholders.
+
+`./Scripts/test-interactions.sh` separately runs **2 AppKit interaction tests**.
+They exercise movement dismissal and its opt-out using in-process events, plus
+real Carbon shortcut registration, conflict preservation, and recorder restoration.
+These checks do not establish physical mouse/trackpad or keyboard behavior.
 
 The build produces an app for the current Mac architecture and verifies its
-signature. These commands do not install or launch it. Actual menu bar interaction,
-keyboard dismissal, multi-display presentation, and lock/sleep behavior require
-separate checks in the running app.
+signature. These commands do not install or launch the app. Actual menu controls,
+shortcut recording, dismissal with physical input, multi-display presentation,
+and lock/sleep behavior require separate checks in the running app.
 
 | File or directory | Responsibility |
 | --- | --- |
@@ -194,7 +212,8 @@ separate checks in the running app.
 | `Sources/CoverController.swift` | Display covers and dismissal |
 | `Sources/SleepPrevention.swift` | App-owned sleep prevention process |
 | `Sources/SettingsWindow.swift` | Settings editing, saving, and cancellation |
-| `Sources/GlobalShortcut.swift` | Global shortcut registration |
+| `Sources/Shortcut.swift` | Persisted shortcut model and supported keys |
+| `Sources/GlobalShortcut.swift` | Global shortcut registration and conflict preservation |
 | `Sources/Localization.swift` | Launch-time language selection and translation fallback |
 | `Sources/main.swift` | Menu bar, persistence, and app coordination |
 | `Resources/Translations/` | Canonical English and bundled Korean interface text |
@@ -202,7 +221,8 @@ separate checks in the running app.
 Settings are stored as `settings` JSON data in the `com.tk.agenticnights`
 UserDefaults domain. The local status snapshot is
 `~/Library/Application Support/agenticnights/status.json`; it includes the app path,
-feature states, schedules, deadlines, cover geometry, process IDs, and localization
+feature states, schedules, deadlines, movement dismissal, shortcut settings,
+cover geometry, process IDs, and localization
 details (`uiLanguage`, `translationDirectory`, `localizationWarnings`). It does not
 record screen content or keystrokes. Check the process ID and executable path to
 confirm that the app is running, since the snapshot may outlive the process.
@@ -229,10 +249,10 @@ executable are platform components, not bundled or relicensed by this project.
 ## 한국어
 
 Mac이 자동으로 잠들지 않게 유지하고, 일정한 간격마다 디스플레이를 검은 창으로
-덮는 작은 메뉴 막대 앱입니다. 화면 보호와 잠자기 방지를 따로 제어하고, 매일의
+덮는 작은 메뉴 막대 앱입니다. 스크린 블랙아웃과 잠자기 방지를 따로 제어하고, 매일의
 작동 시간대와 잠자기 방지 자동 종료 타이머를 설정할 수 있습니다.
 
-**버전 1.2.0 · macOS 13 이상 · 영어·한국어 기본 제공 · MIT 라이선스**
+**버전 1.3.0 · macOS 13 이상 · 영어·한국어 기본 제공 · MIT 라이선스**
 
 인터페이스는 기본적으로 macOS의 언어를 따릅니다. 사용자나 AI 에이전트가 앱 데이터의
 번역 파일을 편집하여 다른 언어를 추가할 수 있으며, 앱을 다시 빌드할 필요가 없습니다.
@@ -285,8 +305,9 @@ Scripts/test.sh, Scripts/build.sh, Scripts/install.sh를 순서대로 실행한 
 설치 스크립트의 종료·백업 절차를 따르며 설정과 데이터를 보존하세요.
 별도로 요청한 설정이 없다면 앱의 기본값을 사용하세요.
 
-설치본 서명, 설치 전후 파일 일치, 실제 실행 경로를 확인하세요. 달 아이콘,
-클릭 작업 선택, 기능 전환, 설정, 저장·취소, 재실행 후 설정 유지를 검사하고,
+설치본 서명, 설치 전후 파일 일치, 실제 실행 경로를 확인하세요. 달 아이콘 메뉴,
+빠른 제어, 마우스 이동 옵션, 단축키 입력, 저장·취소, 재실행 후 설정 유지를
+검사하세요. 프로세스 내부 이벤트 검사는 실제 마우스·키보드 입력 검사와 구분하고,
 검사용으로 바꾼 설정은 복원하세요. 앱 소유 caffeinate를 다른 잠자기 방지
 프로세스와 구분하세요. 필요하면 시간 제한이 있는 잠자기 방지를 사용하고,
 직접 시작한 것만 완료 후 해제하세요.
@@ -299,42 +320,49 @@ Scripts/test.sh, Scripts/build.sh, Scripts/install.sh를 순서대로 실행한 
 
 ### 사용
 
-메뉴 막대에는 달 아이콘 하나만 표시합니다. **Settings**에서 달 아이콘을 클릭할 때
-제어할 기능을 선택합니다. 아래 항목 이름은 영어 번역을 기준으로 표기했습니다.
+메뉴 막대의 달 아이콘을 클릭하면 자주 쓰는 기능과 **설정…**을 바로 열 수 있습니다.
+좌클릭, 우클릭, 보조 키를 누른 클릭 모두 같은 메뉴를 엽니다. 기능이 하나라도 켜져
+있으면 채워진 달을 표시하고, 메뉴와 툴팁에서 각 기능의 현재 상태를 확인할 수
+있습니다. 업데이트는 기존 기능의 켜짐 상태와 호환되는 설정을 유지하며, 이전의
+아이콘 클릭 동작 선택은 더 이상 사용하지 않습니다.
 
-| 선택 항목 | 달 아이콘 클릭 |
+| 메뉴 항목 | 동작 |
 | --- | --- |
-| Screen protection | 자동 화면 보호 켜기/끄기 |
-| Keep awake | 잠자기 방지 켜기/끄기 |
-| Screen protection + keep awake (기본값) | 두 기능을 함께 켜기/끄기 |
+| 스크린 블랙아웃 켜기 / Mac 잠자기 방지 | 각 기능을 독립적으로 켜거나 끄기 |
+| 블랙아웃 간격 | 5·10·15·30·60분 선택, 간격 직접 설정은 설정 창 열기 |
+| 마우스 이동으로 화면 가림 해제 | 마우스 이동 해제를 켜거나 끄기 |
+| 잠자기 방지 자동 종료 | 직접 끌 때까지 또는 30·60·120분 후 선택; 잠자기 방지의 켜짐 상태는 유지 |
+| 지금 화면 가리기 / 화면 가림 해제 | 검은 창 표시 또는 해제 |
+| 단축키 / 설정… | 단축키, 사용자 지정 시간과 매일의 시간대를 편집하는 설정 창 열기 |
 
-선택한 기능 중 하나라도 켜져 있으면 클릭으로 모두 끄고, 모두 꺼져 있으면 켭니다.
-선택하지 않은 기능은 유지됩니다. 클릭할 작업만 바꾸는 것은 기능을 전환하거나
-타이머를 다시 시작하지 않습니다. 선택한 기능 중 하나라도 켜져 있으면 채워진 달이
-표시되며, 포인터를 올리면 현재 상태를 볼 수 있습니다. 우클릭, Control-클릭 또는
-Option-클릭으로 설정과 수동 제어 메뉴를 엽니다.
-
-- **Screen protection**은 처음에 켜져 있으며, 기본 간격은 10분이고 시간대 제한은
-  없습니다. 한 주기가 지나면 처음 가립니다. 자동 화면 보호 작동 중 수동으로
+- **스크린 블랙아웃**은 처음에 켜져 있으며, 기본 간격은 10분이고 시간대 제한은
+  없습니다. 한 주기가 지나면 처음 가립니다. 자동 블랙아웃 작동 중 수동으로
   가리면 그 시점부터 다음 주기를 계산합니다.
-- **Keep awake**는 화면 보호와 별도로 Mac과 디스플레이의 자동 잠자기를 막습니다.
-  처음에는 켜져 있고 타이머와 시간대 제한은 없습니다. 선택 가능한 자동 종료
-  타이머는 1–1440분이며 잠자기 방지가 실제 작동할 때 시작합니다. 시간대 밖이나
-  앱이 종료된 동안에도 시간이 흐르고, 만료되면 Keep awake가 꺼집니다. 재실행,
-  잠자기 후 복귀, 화면 보호 설정 변경은 종료 시각을 연장하지 않습니다.
-  Keep awake를 껐다 켜거나 타이머 분수·사용 여부를 바꾸면 작동 시 새 타이머를 시작합니다.
+- **잠자기 방지**는 블랙아웃과 별도로 Mac과 디스플레이의 자동 잠자기를 막습니다.
+  처음에는 켜져 있고 타이머와 시간대 제한은 없습니다. 자동 종료 타이머는
+  1–1440분이며 잠자기 방지가 실제 작동할 때 시작합니다. 시간대 밖이나 앱이
+  종료된 동안에도 시간이 흐르고, 만료되면 잠자기 방지가 꺼집니다. 재실행,
+  잠자기 후 복귀, 블랙아웃 설정 변경은 종료 시각을 연장하지 않습니다.
+  잠자기 방지를 껐다 켜거나 타이머 분수·사용 여부를 바꾸면 작동 시 새 타이머를 시작합니다.
+- 기본적으로 마우스나 트랙패드를 움직이면 화면 가림을 해제합니다. 메뉴나 설정에서
+  **마우스 이동으로 화면 가림 해제**를 끄면 클릭, 키 입력, 단축키 또는 앱 전환으로
+  해제할 때까지 유지합니다. 해제에 사용한 키는 이전 앱에 전달되지 않습니다.
+  이 옵션은 앱의 검은 창에 적용되며, 실제 시스템·디스플레이 잠자기 해제는
+  macOS의 동작을 따릅니다.
+- 기본 전역 단축키는 **Control+Option+Command+B**입니다. 설정에서 **변경…**을
+  누른 뒤 Command·Option·Control 중 하나와 A–Z·0–9·F1–F20을 조합해 누르세요.
+  Shift도 함께 사용할 수 있습니다. 단축키는 키의 물리적 위치를 사용하고 미국식
+  키보드 배열의 이름으로 표시합니다. Esc는 단축키 입력만 취소합니다. **기본값 사용**은
+  편집 중인 조합을 기본값으로 되돌립니다. **설정 적용**을 눌러 저장하세요.
+  사용할 수 없는 조합이면 창을 열어둔 채 기존 단축키와 저장된 설정을 유지합니다.
 - 매일의 시간대는 시스템의 현지 시각을 사용하며, 시작 시각을 포함하고 종료
   시각에 멈춥니다. `22:00–07:00`처럼 자정을 넘는 시간대를 지원합니다.
   시작과 종료가 같으면 하루 종일 작동합니다.
-- 검은 창이 표시되는 동안 메뉴 막대를 숨기는 것이 기본값이며 Settings에서
-  해제할 수 있습니다. 가림이 끝나면 이전 메뉴 막대·Dock 표시 상태로 돌아갑니다.
-- **Cover now**, **Uncover**, **Control+Option+Command+B**로 수동 제어합니다.
-  키 입력이나 마우스 클릭으로 가림을 해제하며, 해제에 사용한 키는 이전 앱에
-  전달되지 않습니다. 다른 앱으로 전환해도 해제됩니다. 수동 가림은 Keep awake를
-  켜거나 끄지 않습니다.
-- 가림 창은 일반 창 높이를 사용하며, Settings가 열린 동안에는 자동 가림을
-  건너뜁니다. 설정을 취소하거나 창을 닫으면 저장값을 보존하고, 앱 업데이트 시에도
-  호환되는 기존 설정을 유지합니다.
+- 검은 창이 표시되는 동안 메뉴 막대를 숨기는 것이 기본값이며 설정에서 해제할 수
+  있습니다. 가림이 끝나면 이전 메뉴 막대·Dock 표시 상태로 돌아갑니다.
+- 가림 창은 일반 창 높이를 사용하며, 설정이나 메뉴가 열린 동안에는 자동 가림을
+  건너뜁니다. 설정을 취소하거나 창을 닫으면 저장값을 보존합니다. 메뉴에서 바꾼
+  값은 즉시 적용하며, 수동 가림은 잠자기 방지를 켜거나 끄지 않습니다.
 - 앱을 종료하면 이 앱이 시작한 `caffeinate`만 종료합니다. 시스템의 영구 잠자기
   설정이나 다른 앱의 잠자기 방지는 변경하지 않습니다.
 
@@ -369,13 +397,16 @@ Settings에는 언어 선택 메뉴가 없습니다.
 
 번역을 위해 서명된 앱 번들이나 Swift 파일을 수정하지 마세요. 앱 데이터만 바꾸므로
 다시 빌드하거나 서명을 바꿀 필요가 없습니다. 앱은 업데이트할 때도 기존 사용자 번역을
-덮어쓰지 않습니다. 새 키는 번역을 추가할 때까지 기본 제공 영어로 표시합니다.
+덮어쓰지 않습니다. 기존 앱 데이터의 영어 파일에는 새 키가 없을 수 있으므로,
 번역을 갱신할 때는 최신 기준 영어 파일을 참고하세요.
 
-일부 항목이 없거나 잘못된 경우 해당 문구는 기본 제공 영어로 표시합니다. JSON 파일
-전체가 잘못된 경우에는 선택한 언어의 기본 제공 번역을 사용하고, 없으면 영어를
-사용합니다. 로컬 상태 스냅샷의 `uiLanguage`, `translationDirectory`,
-`localizationWarnings`에서 언어 선택과 경고를 확인할 수 있습니다.
+새 키를 포함하여 일부 항목이 없거나 잘못된 경우 선택한 언어의 최신 기본 제공
+번역을 먼저 사용하고, 없으면 영어로 표시합니다. JSON 파일 전체가 잘못된 경우도
+같습니다. v1.2가 내보낸 기본 문구와 정확히 같은 값은 최신 기본 문구로 표시하고,
+사용자가 다르게 편집한 값은 유지합니다. 이 과정에서 사용자 번역 파일을 다시 쓰지
+않습니다. 번들의 `legacy-v1.2.json`은 이전 기본 문구를 기록한 자료이며, 선택할 수
+있는 언어나 내보내는 편집용 번역 파일이 아닙니다. 로컬 상태 스냅샷의 `uiLanguage`,
+`translationDirectory`, `localizationWarnings`에서 언어 선택과 경고를 확인할 수 있습니다.
 
 #### AI 에이전트로 번역
 
@@ -397,16 +428,20 @@ de로 설정하세요. Swift 파일, 앱 번들, 서명, 다른 번역 파일이
 ### 개발과 테스트
 
 저장소 루트에서 `./Scripts/test.sh`와 `./Scripts/build.sh`를 실행합니다.
-테스트 스크립트는 일정과 현지화 테스트 모음을 모두 실행합니다.
-**일정 테스트 25개**는 일정 경계, 자정을 넘는 시간대, 서머타임, 타이머
-만료·저장, 설정 호환성, 독립적인 기능 전환과 아이콘 작업 선택을 확인합니다.
-이 테스트 모음은 성공하면 `PASS: 25 schedule tests`를 출력합니다. 별도의
-현지화 테스트는 언어 선택, 편집 가능한 번역 데이터, 대체 문구 처리와
-플레이스홀더 검증을 확인합니다.
+테스트 스크립트는 **일정·설정 테스트 24개**와 **현지화 테스트 10개**를 실행합니다.
+일정 경계, 자정을 넘는 시간대, 서머타임, 타이머 만료·저장, 설정 호환성,
+독립적인 기능 제어, 마우스 이동·단축키 설정, 언어 선택, 번역 업데이트와
+플레이스홀더를 확인합니다.
+
+`./Scripts/test-interactions.sh`는 별도로 **AppKit 상호작용 테스트 2개**를 실행합니다.
+프로세스 내부 이벤트로 마우스 이동 해제와 끄기 옵션을 확인하고, 실제 Carbon
+단축키 등록으로 충돌 시 기존 조합 보존과 입력 취소 후 복원을 확인합니다.
+이 검사는 사람이 실제 마우스·트랙패드·키보드를 조작한 결과를 입증하지 않습니다.
 
 빌드는 현재 Mac 아키텍처용 앱을 만들고 서명을 검사합니다. 이 명령들은 앱을
-설치하거나 실행하지 않습니다. 실제 메뉴 막대 조작, 키 입력 해제, 여러
-디스플레이의 표시와 잠금·잠자기 동작은 실행 중인 앱에서 별도로 확인해야 합니다.
+설치하거나 실행하지 않습니다. 실제 메뉴 조작, 단축키 입력, 물리적 입력을 통한
+해제, 여러 디스플레이의 표시와 잠금·잠자기 동작은 실행 중인 앱에서 별도로
+확인해야 합니다.
 
 | 파일·폴더 | 역할 |
 | --- | --- |
@@ -414,14 +449,16 @@ de로 설정하세요. Swift 파일, 앱 번들, 서명, 다른 번역 파일이
 | `Sources/CoverController.swift` | 디스플레이 가림과 해제 |
 | `Sources/SleepPrevention.swift` | 앱 소유 잠자기 방지 프로세스 |
 | `Sources/SettingsWindow.swift` | 설정 편집·저장·취소 |
-| `Sources/GlobalShortcut.swift` | 전역 단축키 등록 |
+| `Sources/Shortcut.swift` | 단축키 저장 모델과 지원 키 |
+| `Sources/GlobalShortcut.swift` | 전역 단축키 등록과 충돌 시 보존 |
 | `Sources/Localization.swift` | 시작 시 언어 선택과 번역 대체 처리 |
 | `Sources/main.swift` | 메뉴 막대, 저장과 앱 동작 연결 |
 | `Resources/Translations/` | 기준 영어 원문과 기본 제공 한국어 인터페이스 문구 |
 
 설정은 `com.tk.agenticnights` UserDefaults의 `settings` JSON 데이터로 저장합니다.
 로컬 상태 스냅샷은 `~/Library/Application Support/agenticnights/status.json`이며,
-앱 경로, 기능 상태, 시간대, 종료 시각, 가림 창 크기, 프로세스 ID와 현지화 정보
+앱 경로, 기능 상태, 시간대, 종료 시각, 마우스 이동 해제·단축키 설정, 가림 창 크기,
+프로세스 ID와 현지화 정보
 (`uiLanguage`, `translationDirectory`, `localizationWarnings`)를 기록합니다.
 화면 내용이나 키 입력은 저장하지 않습니다. 앱이 종료된 뒤에도 파일이 남을 수
 있으므로 실제 실행 여부는 프로세스 ID와 실행 경로를 함께 확인하세요.

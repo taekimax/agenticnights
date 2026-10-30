@@ -44,9 +44,8 @@ enum ScheduleTests {
             ("disabling awake or its timer clears the deadline", awakeTimerDisabled),
             ("awake overnight and equal-time schedules", awakeScheduleBoundaries),
             ("awake defaults validation and partial decoding", awakeDefaults),
-            ("icon toggles only the selected feature", iconSelection),
-            ("combined icon stops a mixed state then enables both", combinedIconToggle),
-            ("icon choice persists without changing running features", iconPersistence),
+            ("interaction preferences migrate and persist", interactionPreferences),
+            ("shortcut validation preserves safe defaults", shortcutValidation),
         ]
         for (name, test) in tests {
             try test()
@@ -311,50 +310,30 @@ enum ScheduleTests {
         let restored = try JSONDecoder().decode(AwakeSettings.self, from: JSONEncoder().encode(normalized))
         try expect(restored == normalized, "Full awake settings and deadline must round-trip")
     }
-    private static func iconSelection() throws {
-        var settings = VeilSettings(awake: AwakeSettings(timerEnabled: true, expiresAt: date(12)), iconAction: .cover)
-        let runningAwake = settings.awake
-        settings.toggleIconFeatures()
-        try expect(!settings.enabled && settings.awake == runningAwake, "Cover-only click must leave the running awake timer intact")
-        settings.toggleIconFeatures()
-        try expect(settings.enabled && settings.awake == runningAwake, "Cover-only reenable must preserve awake settings")
-        settings.iconAction = .awake
-        settings.toggleIconFeatures()
-        try expect(!settings.awake.enabled && settings.enabled, "Awake-only click must preserve cover enablement")
-        settings.toggleIconFeatures()
-        try expect(settings.awake.enabled && settings.enabled, "Awake-only reenable must preserve cover enablement")
-        settings.enabled = false
-        try expect(settings.iconFeaturesEnabled, "Icon state must follow selected awake feature, not the off cover")
-        settings.iconAction = .cover
-        try expect(!settings.iconFeaturesEnabled, "Icon state must ignore an unselected active feature")
+    private static func interactionPreferences() throws {
+        let legacy = try JSONDecoder().decode(VeilSettings.self, from: Data(#"{"enabled":false,"intervalMinutes":15,"iconAction":"awake","awake":{"enabled":true,"timerEnabled":true,"durationMinutes":25}}"#.utf8))
+        try expect(legacy.dismissOnMouseMove && legacy.shortcut == .defaults, "Existing users gain movement dismissal and the existing shortcut")
+        try expect(!legacy.enabled && legacy.awake.enabled && legacy.intervalMinutes == 15, "Migration must preserve independent existing settings")
+        var edited = legacy
+        edited.dismissOnMouseMove = false
+        edited.shortcut = KeyboardShortcut(keyCode: 45, modifiers: KeyboardShortcut.command | KeyboardShortcut.shift)
+        edited.awake.expiresAt = date(12)
+        let restored = try JSONDecoder().decode(VeilSettings.self, from: JSONEncoder().encode(edited)).validated()
+        try expect(restored == edited, "Movement opt-out, custom shortcut, and awake deadline must survive relaunch")
     }
 
-    private static func combinedIconToggle() throws {
-        var settings = VeilSettings(enabled: true, awake: AwakeSettings(enabled: false), iconAction: .both)
-        try expect(settings.iconFeaturesEnabled, "A mixed state must offer stopping the active feature")
-        settings.toggleIconFeatures()
-        try expect(!settings.enabled && !settings.awake.enabled, "One click must stop both from a mixed state")
-        settings.toggleIconFeatures()
-        try expect(settings.enabled && settings.awake.enabled, "The next click must enable both")
-        settings.toggleIconFeatures()
-        try expect(!settings.iconFeaturesEnabled, "A combined click must turn both off")
-        settings.awake.enabled = true
-        settings.toggleIconFeatures()
-        try expect(!settings.enabled && !settings.awake.enabled, "The opposite mixed state must also stop both")
-    }
-
-    private static func iconPersistence() throws {
-        let legacy = try JSONDecoder().decode(VeilSettings.self, from: Data(#"{"enabled":false,"awake":{"enabled":true,"timerEnabled":true,"durationMinutes":25}}"#.utf8))
-        try expect(legacy.iconAction == .both && !legacy.enabled && legacy.awake.enabled, "Adding icon choice must preserve the existing independent switches")
-        var settings = legacy
-        settings.awake.expiresAt = date(12)
-        let originalAwake = settings.awake
-        for action in IconAction.allCases {
-            settings.iconAction = action
-            let restored = try JSONDecoder().decode(VeilSettings.self, from: JSONEncoder().encode(settings))
-            try expect(restored == settings, "Every icon choice must round-trip")
-            try expect(!restored.enabled && restored.awake == originalAwake, "Choosing an icon action must not change feature state or deadline")
+    private static func shortcutValidation() throws {
+        for shortcut in [KeyboardShortcut(keyCode: 999, modifiers: KeyboardShortcut.command),
+                         KeyboardShortcut(keyCode: 11, modifiers: KeyboardShortcut.shift),
+                         KeyboardShortcut(keyCode: 11, modifiers: UInt32.max)] {
+            try expect(!shortcut.isValid, "Unsupported keys and plain typing must not be global shortcuts")
+            var settings = VeilSettings(intervalMinutes: 25, shortcut: shortcut)
+            settings = settings.validated()
+            try expect(settings.shortcut == .defaults && settings.intervalMinutes == 25, "Invalid shortcut must not discard other settings")
         }
+        let malformed = try JSONDecoder().decode(VeilSettings.self, from: Data(#"{"intervalMinutes":25,"shortcut":{"keyCode":"bad"}}"#.utf8))
+        try expect(malformed.intervalMinutes == 25 && malformed.shortcut == .defaults, "Malformed shortcut must recover without losing other settings")
+        try expect(KeyboardShortcut.defaults.displayName == "⌃⌥⌘B", "Default shortcut must remain familiar")
+        try expect(KeyboardShortcut(keyCode: 122, modifiers: KeyboardShortcut.control).isValid, "Function-key combinations must be supported")
     }
-
 }
