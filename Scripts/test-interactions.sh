@@ -6,7 +6,7 @@ xcrun swiftc -swift-version 5 -num-threads 2 \
   -target "$(uname -m)-apple-macosx13.0" \
   -module-cache-path "$project_root/.build/ModuleCache" \
   "$project_root/Sources/Shortcut.swift" "$project_root/Sources/GlobalShortcut.swift" \
-  "$project_root/Sources/CoverController.swift" "$project_root/Sources/Localization.swift" \
+  "$project_root/Sources/Localization.swift" \
   "$project_root/Tests/InteractionTests.swift" -framework AppKit -framework Carbon \
   -o "$project_root/.build/tests/interaction-tests"
 "$project_root/.build/tests/interaction-tests"

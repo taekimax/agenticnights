@@ -10,37 +10,8 @@ enum InteractionTests {
     static func main() {
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)
-        movementDismissal()
         shortcutReplacement()
-        print("PASS: 2 AppKit interaction tests (in-process events and real hotkey registration)")
-    }
-
-    static func movementDismissal() {
-        let window = BlackWindow(contentRect: NSRect(x: 0, y: 0, width: 100, height: 100),
-                                 styleMask: .borderless, backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false
-        var dismissals = 0
-        window.dismiss = { dismissals += 1 }
-        window.shownAt = 100
-        func movement(at timestamp: TimeInterval) -> NSEvent {
-            NSEvent.mouseEvent(with: .mouseMoved, location: NSPoint(x: 20, y: 20), modifierFlags: [],
-                timestamp: timestamp, windowNumber: window.windowNumber, context: nil,
-                eventNumber: 1, clickCount: 0, pressure: 0)!
-        }
-        window.sendEvent(movement(at: 99))
-        expect(dismissals == 0, "Movement queued before showing must not immediately dismiss")
-        window.sendEvent(movement(at: 101))
-        expect(dismissals == 1, "Movement must dismiss by default")
-        window.dismissOnMouseMove = false
-        window.sendEvent(movement(at: 102))
-        expect(dismissals == 1, "Opting out must keep the cover on movement")
-        let key = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
-            timestamp: 103, windowNumber: window.windowNumber, context: nil,
-            characters: "x", charactersIgnoringModifiers: "x", isARepeat: false, keyCode: 7)!
-        window.keyDown(with: key)
-        expect(dismissals == 2, "A key must still dismiss while movement is disabled")
-        window.close()
-        print("PASS: movement default, stale movement, opt-out, and keyboard fallback")
+        print("PASS: AppKit shortcut registration and replacement")
     }
 
     static func shortcutReplacement() {

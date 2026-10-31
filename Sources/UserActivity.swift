@@ -1,10 +1,8 @@
 import CoreGraphics
 import Foundation
 
-/// Reads elapsed input time, not the input contents. No global event tap is needed.
-/// Use the login session's combined state for keyboard, mouse and trackpad events.
-/// This matches Chromium's ui/base/idle/idle_mac.mm. ActivityWatch uses the HID
-/// state instead; DEVELOPMENT.md documents the comparison and why we use session input.
+/// Reads elapsed input time, not the input contents. This idle query needs no tap.
+/// HID state keeps normal synthetic agent activity from postponing blackout.
 struct UserActivity {
     private var resumedAt: TimeInterval?
 
@@ -14,7 +12,7 @@ struct UserActivity {
 
     func idleSeconds() -> TimeInterval {
         elapsed(systemIdle: CGEventSource.secondsSinceLastEventType(
-            .combinedSessionState, eventType: CGEventType(rawValue: UInt32.max)!),
+            .hidSystemState, eventType: CGEventType(rawValue: UInt32.max)!),
             uptime: ProcessInfo.processInfo.systemUptime)
     }
 

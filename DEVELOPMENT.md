@@ -1,59 +1,63 @@
 # Development
 
-User instructions: [README](README.md). The app uses Swift and AppKit, targets macOS 13+, and has no external package dependencies.
+Swift / AppKit, macOS 13+, no package dependencies. [User guide](README.md).
 
-## Build and verify
+## Build and delivery
 
-Run from the repository root with Xcode Command Line Tools installed. Build and test scripts use two compiler threads. Builds target the current Mac’s architecture and use a local ad-hoc signature.
-
-| Command | Scope |
+| Command | Purpose |
 | --- | --- |
-| `./Scripts/test.sh` | 33 schedule/settings/input-timing tests and 10 localization tests |
-| `./Scripts/test-interactions.sh` | 2 tests using in-process AppKit events and Carbon shortcut registration |
-| `./Scripts/build.sh` | Compile `.build/agenticnights.app` and verify its signature |
-| `./Scripts/install.sh` | Quit the installed app, retain it in Trash, copy the build, verify signature and full payload equality |
-| `open /Applications/agenticnights.app` | Launch the installed bundle |
+| `./Scripts/build.sh` | Build and ad-hoc sign `.build/agenticnights.app`; two compiler threads |
+| `./Scripts/install.sh` | Quit the installed app, retain it in Trash, install and compare all payloads |
+| `open /Applications/agenticnights.app` | Launch the installed app |
+| `./Scripts/test.sh` | Existing schedule, localization and memory password checks |
+| `./Scripts/test-interactions.sh` | Carbon shortcut registration checks |
+| `./Scripts/test-privacy-live.sh` | Opt-in gamma/input experiment; temporarily blocks desk input |
 
-Build output and tests stay in Git-ignored `.build/`. Preserve existing changes before updating a checkout; use SSH for authenticated Git operations.
+Keep generated output in `.build/`. Preserve user settings, translations and useful evidence. Use SSH for authenticated Git operations. The installed app root must remain owner-writable; do not change payload permissions recursively.
 
-Automated tests cover five-minute input resets, continued use, already-idle launch, wake/session time caps, separate schedules, pending and persisted stop deadlines, settings migration, and translations. Synthetic events do not prove physical mouse/keyboard/trackpad behavior. Check physical input, menus, shortcut capture, multiple displays, and actual sleep separately. Report build, installation, launch, automated tests, and live behavior as separate outcomes.
-
-## Code and timing
+## Ownership
 
 | File | Responsibility |
 | --- | --- |
-| [UserActivity.swift](Sources/UserActivity.swift) | Read elapsed input time; exclude elapsed sleep/inactive-session time after resume |
-| [Schedule.swift](Sources/Schedule.swift) | Shared idle threshold, blackout scheduling, settings persistence model, awake deadline |
-| [main.swift](Sources/main.swift) | One-second polling, settings/menu integration, session notifications, status output |
-| [CoverController.swift](Sources/CoverController.swift) | Black windows and input dismissal |
-| [SleepPrevention.swift](Sources/SleepPrevention.swift) | Own and stop the app’s `caffeinate -di -w <pid>` child |
-| [Localization.swift](Sources/Localization.swift) | Bundled and user-editable translations |
+| `DisplayBlackout.swift` | Read full gamma ramps, blacken connected displays, restore originals |
+| `PhysicalInputFilter.swift` | HID event tap on a dedicated run loop; discard desk input, allow other sources |
+| `PrivacyLockController.swift` | Shared blackout lifecycle, optional authentication, prompt animation and retry limits |
+| `UnlockPassword.swift` | Keychain verifier, PBKDF2-SHA256 and constant-time comparison |
+| `UserActivity.swift` | HID idle duration, capped after wake/session return |
+| `Schedule.swift` | Blackout delay, independent daily hours, persisted awake timer |
+| `SleepPrevention.swift` | Own `caffeinate -di -w <app-pid>` and release it on stop |
+| `main.swift` | Menus, settings, system notifications, one-second updates and status |
+| `Localization.swift` | Bundled text and user translation overrides |
 
-Both automatic features require the shared idle delay, even if only one is enabled. The existing `intervalMinutes` setting stores that delay. Launch and daily schedule entry use elapsed time since the last input; wake and session resume cap it to time since resumption. Invalid idle readings act as recent input. Polling can delay activation or release by about one second.
+The old `CoverController` and menu-bar hiding preference are removed. Gamma is the only blackout mechanism. Opaque windows exist only while displaying the password prompt.
 
-Manual blackout and its shortcut operate immediately. A completed blackout also delays another automatic blackout by at least the configured interval. Automatic starts are suppressed while Settings or a menu is open. Feature schedules use local time with an inclusive start and exclusive end; equal endpoints mean all day.
+## Behavior
 
-`AwakeSettings.update` requires an explicit `idleReady` decision. The optional stop deadline starts on first eligible idle activation and is persisted. Input releases the assertion but preserves that deadline. Expiry disables the feature, including during resumed use or outside scheduled hours; an expired deadline is consumed on relaunch. Changing the timer or toggling the feature restarts its deadline at the next eligible activation. Changes to other controls preserve it.
+Blackout waits for physical inactivity. It is suppressed while Settings or a menu is open. Both automatic and manual blackout use the same controller. Ordinary mode consumes the physical key/click that dismisses it; mouse movement dismissal is optional. Synthetic agent input and app activation leave blackout in place.
 
-## Data and translations
+Sleep prevention starts immediately when enabled within its scheduled hours. Input, menus and Settings do not stop it. Its optional deadline starts at activation and survives restart; expiry disables the feature. Password protection overrides its hours and timer until authenticated unlock. Manual macOS lock, sleep and inactive sessions release interception so login input remains usable.
 
-- Settings: JSON under `settings` in UserDefaults domain `com.tk.agenticnights`.
-- Editable catalogs: `~/Library/Application Support/agenticnights/Translations/`.
-- Status: `~/Library/Application Support/agenticnights/status.json`. It includes settings, current idle eligibility, process IDs, display geometry, and language diagnostics. It stores no screen content or keystrokes. Verify `running`, PID, and bundle path because the file remains after exit.
+Three wrong passwords cause a 60-second wait. Each subsequent failure doubles the wait to 120, 240 and 480 seconds. The seventh failure requires macOS login lock. Attempts during a wait are ignored. Escape and prompt timeout retain failure state; only successful app authentication or, after escalation, an observed macOS lock/unlock transition resets it. Failure to invoke macOS lock leaves input blocked and permits another lock request.
 
-English is the source catalog. Missing or invalid translated values use the selected bundled language, then English. Keep keys and placeholder sets aligned. Legacy exported defaults can adopt new wording without rewriting user files; custom translations remain intact. Translation files are read at launch.
+The prompt appears above the desktop before gamma is restored. Closing it reapplies gamma blackout before removing the windows. A 30 Hz timer, active only while the prompt is visible, moves one text group per display using phase-modulated sine waves. Smooth interpolation cycles a four-color metallic palette. There is no physics engine, shader or external asset.
 
-## Input detection references
+The password uses a random 32-byte salt and PBKDF2-HMAC-SHA256 with 210,000 iterations. Keychain holds the verifier, not plaintext. Unlock reads cannot open an authorization dialog behind blackout. No default password is created. A shortcut conflict cannot partially commit a new password.
 
-Reviewed 2026-10-31. These sources inform the design; their behavior is not a substitute for testing this app.
+## Data
 
-| Source | Implementation | Decision for agenticnights |
-| --- | --- | --- |
-| [Chromium](https://github.com/chromium/chromium/blob/main/ui/base/idle/idle_mac.mm) | Quartz elapsed-input query with combined login-session state and all input types | Use the same session scope and returned fractional seconds |
-| [ActivityWatch](https://github.com/ActivityWatch/aw-watcher-afk/blob/master/aw_watcher_afk/macos.py) | Quartz elapsed-input query with HID-system state | Useful alternative for hardware-source scope; broader session input is appropriate here |
-| [Hammerspoon](https://github.com/Hammerspoon/hammerspoon/blob/master/extensions/host/libhost.m) | Read `IOHIDSystem/HIDIdleTime` through IOKit | Avoid extra registry access, type handling, resource ownership, and approximate unit conversion |
-| [KeepingYouAwake](https://github.com/newmarcel/KeepingYouAwake/blob/main/Packages/KYASleepWakeTimer/Sources/KYASleepWakeTimer/KYASleepWakeTimer.m) | Manage a `caffeinate` process and activation duration | Reference for sleep-prevention process lifetime; it does not supply this idle-detection algorithm |
+- Settings: JSON data under `settings` in UserDefaults domain `com.tk.agenticnights`.
+- Keychain: service `com.tk.agenticnights.unlock`, account `privacy-cover-password`.
+- Translations: `~/Library/Application Support/agenticnights/Translations/`.
+- Status: `~/Library/Application Support/agenticnights/status.json`; inspect `running`, PID and `bundlePath` before using it.
 
-[Apple’s state definitions](https://developer.apple.com/documentation/coregraphics/cgeventsourcestateid) distinguish combined login-session sources from HID sources. The app reads elapsed time without installing a global event tap or collecting input contents. Automated and remote input may update different state tables depending on how it is posted; do not claim that all automated input is excluded.
+Status records state, permission availability and the owned caffeinate PID; it contains no password, keystrokes or screenshots. English defines translation keys and placeholders. Recognized previously exported defaults use current bundled wording without rewriting custom files.
 
-Keep [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) in distributions. The build copies both into the app bundle.
+## References and verification
+
+[Curtain](https://github.com/acamarata/curtain/tree/0b2295fc15f5a0e3f2ad8ffd36684f8d7c4809a8) informs gamma blackout, physical-source filtering and the non-key password prompt. [RustDesk](https://github.com/rustdesk/rustdesk/blob/3b7e2cebd9303a43eecb9bc96921548df846f45d/src/platform/macos.mm) informs the earlier HID interception point. Original ramps are preserved instead of resetting the ColorSync profile. No password-free emergency uncover is provided.
+
+[KeepingYouAwake](https://github.com/newmarcel/KeepingYouAwake/blob/2be93dd7f390b23fbca934ff3b1ac03468a80077/Packages/KYASleepWakeTimer/Sources/KYASleepWakeTimer/KYASleepWakeTimer.m) informs the caffeinate process lifetime. Immediate activation closes the previous gap before the blackout delay. No simulated input, periodic user-activity declaration or persistent power-setting change is added. Screen-saver and automatic-login-lock suppression beyond `-di` remains unverified.
+
+[Implementation record](docs/privacy-protection-2026-10-31.md) distinguishes earlier physical checks from current build and delivery checks. Per the 2026-11-01 request, this revision adds no separate tests and does not rerun behavior experiments. Earlier checks do not validate the new backoff or animation. Real Keychain, third-party agents, HDR/EDR workflows and failure-triggered macOS login lock remain separate checks. DisplayLink is unsupported.
+
+Distribute [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) with the app.

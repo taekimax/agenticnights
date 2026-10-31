@@ -8,8 +8,12 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
     private let enabledButton = NSButton(checkboxWithTitle: tr("settings.enableCover"), target: nil, action: nil)
     private let intervalField = NSTextField(string: "10")
     private let scheduleButton = NSButton(checkboxWithTitle: tr("settings.coverSchedule"), target: nil, action: nil)
-    private let hideMenuBarButton = NSButton(checkboxWithTitle: tr("settings.hideMenuBar"), target: nil, action: nil)
     private let mouseMoveButton = NSButton(checkboxWithTitle: tr("settings.dismissOnMouseMove"), target: nil, action: nil)
+    private let protectionButton = NSButton(checkboxWithTitle: tr("privacy.enable"), target: nil, action: nil)
+    private let passwordField = NSSecureTextField(string: "")
+    private let confirmationField = NSSecureTextField(string: "")
+    private let coverHint = NSTextField(wrappingLabelWithString: "")
+    private let idleHint = NSTextField(wrappingLabelWithString: "")
     private let startPicker = NSDatePicker()
     private let endPicker = NSDatePicker()
     private let awakeEnabledButton = NSButton(checkboxWithTitle: tr("settings.enableAwake"), target: nil, action: nil)
@@ -25,11 +29,11 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
     private let statusLabel = NSTextField(wrappingLabelWithString: "")
     private let errorLabel = NSTextField(wrappingLabelWithString: "")
     private var baseline = VeilSettings.defaults
-    var onSave: ((VeilSettings, VeilSettings) -> String?)?
+    var onSave: ((VeilSettings, VeilSettings, String?) -> String?)?
     var onRecordingChanged: ((Bool) -> Void)?
 
     init() {
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 780, height: 640),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 820, height: 820),
                               styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.title = tr("settings.title")
         window.isReleasedWhenClosed = false
@@ -51,8 +55,10 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
             enabledButton.state = settings.enabled ? .on : .off
             intervalField.stringValue = String(settings.intervalMinutes)
             scheduleButton.state = settings.scheduleEnabled ? .on : .off
-            hideMenuBarButton.state = settings.hideMenuBar ? .on : .off
             mouseMoveButton.state = settings.dismissOnMouseMove ? .on : .off
+            protectionButton.state = settings.passwordProtection ? .on : .off
+            passwordField.stringValue = ""
+            confirmationField.stringValue = ""
             startPicker.dateValue = date(for: settings.startMinute)
             endPicker.dateValue = date(for: settings.endMinute)
             awakeEnabledButton.state = settings.awake.enabled ? .on : .off
@@ -133,7 +139,7 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
         }
         intervalField.setAccessibilityLabel(tr("accessibility.idleDelay"))
         awakeDurationField.setAccessibilityLabel(tr("accessibility.duration"))
-        for button in [scheduleButton, awakeScheduleButton, awakeTimerButton] {
+        for button in [scheduleButton, awakeScheduleButton, awakeTimerButton, protectionButton] {
             button.target = self
             button.action = #selector(scheduleChanged)
         }
@@ -149,16 +155,21 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
 
         stack.addArrangedSubview(row([NSTextField(labelWithString: tr("settings.idleDelay")),
                                      intervalField, NSTextField(labelWithString: tr("settings.minutes"))]))
-        stack.addArrangedSubview(hint(tr("settings.idleHint")))
+        idleHint.font = .systemFont(ofSize: 12)
+        idleHint.textColor = .secondaryLabelColor
+        stack.addArrangedSubview(idleHint)
+        idleHint.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        coverHint.font = .systemFont(ofSize: 12)
+        coverHint.textColor = .secondaryLabelColor
 
         let coverBox = section(tr("feature.cover"), views: [
             enabledButton,
             scheduleButton,
             row([NSTextField(labelWithString: tr("settings.start")), startPicker]),
             row([NSTextField(labelWithString: tr("settings.end")), endPicker]),
-            hideMenuBarButton,
             mouseMoveButton,
-            hint(tr("settings.coverHint"))
+            protectionButton,
+            coverHint
         ])
         let awakeBox = section(tr("feature.awake"), views: [
             awakeEnabledButton,
@@ -176,6 +187,17 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
         stack.addArrangedSubview(columns)
         columns.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         coverBox.heightAnchor.constraint(equalTo: awakeBox.heightAnchor).isActive = true
+
+        for field in [passwordField, confirmationField] {
+            field.widthAnchor.constraint(equalToConstant: 260).isActive = true
+        }
+        passwordField.setAccessibilityLabel(tr("privacy.newPassword"))
+        confirmationField.setAccessibilityLabel(tr("privacy.confirmPassword"))
+        stack.addArrangedSubview(row([NSTextField(labelWithString: tr("privacy.newPassword")), passwordField,
+                                     NSTextField(labelWithString: tr("privacy.confirmPassword")), confirmationField]))
+        let protectionHint = hint(tr("privacy.settingsHint"))
+        stack.addArrangedSubview(protectionHint)
+        protectionHint.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
 
         shortcutButton.bezelStyle = .rounded
         shortcutButton.target = self
@@ -257,6 +279,9 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
         awakeStartPicker.isEnabled = awakeScheduleButton.state == .on
         awakeEndPicker.isEnabled = awakeScheduleButton.state == .on
         awakeDurationField.isEnabled = awakeTimerButton.state == .on
+        mouseMoveButton.isEnabled = protectionButton.state != .on
+        coverHint.stringValue = tr(protectionButton.state == .on ? "privacy.coverHint" : "settings.coverHint")
+        idleHint.stringValue = tr("settings.idleHint")
     }
 
     @objc private func saveChanges() {
@@ -279,8 +304,8 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
         settings.enabled = enabledButton.state == .on
         settings.intervalMinutes = interval
         settings.scheduleEnabled = scheduleButton.state == .on
-        settings.hideMenuBar = hideMenuBarButton.state == .on
         settings.dismissOnMouseMove = mouseMoveButton.state == .on
+        settings.passwordProtection = protectionButton.state == .on
         settings.startMinute = minutes(from: startPicker.dateValue)
         settings.endMinute = minutes(from: endPicker.dateValue)
         settings.awake.enabled = awakeEnabledButton.state == .on
@@ -289,7 +314,16 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
         settings.awake.scheduleEnabled = awakeScheduleButton.state == .on
         settings.awake.startMinute = minutes(from: awakeStartPicker.dateValue)
         settings.awake.endMinute = minutes(from: awakeEndPicker.dateValue)
-        if let error = onSave?(settings, baseline) {
+        let password = passwordField.stringValue
+        guard password == confirmationField.stringValue else {
+            errorLabel.stringValue = tr("privacy.passwordMismatch")
+            return
+        }
+        if !password.isEmpty, UnlockPassword.validationError(password) != nil {
+            errorLabel.stringValue = tr("privacy.passwordRules")
+            return
+        }
+        if let error = onSave?(settings, baseline, password.isEmpty ? nil : password) {
             errorLabel.stringValue = error
             return
         }
@@ -300,10 +334,16 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
 
     override func close() {
         stopRecording()
+        passwordField.stringValue = ""
+        confirmationField.stringValue = ""
         super.close()
     }
 
-    func windowWillClose(_ notification: Notification) { stopRecording() }
+    func windowWillClose(_ notification: Notification) {
+        stopRecording()
+        passwordField.stringValue = ""
+        confirmationField.stringValue = ""
+    }
     func windowDidResignKey(_ notification: Notification) { stopRecording() }
 
     private func updateShortcutTitle() {

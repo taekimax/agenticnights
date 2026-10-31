@@ -59,9 +59,9 @@ struct AwakeSettings: Codable, Equatable, Sendable {
 
     /// The finite timer measures elapsed time, including hours outside the daily
     /// range. It starts only on the first actual activation and never renews on
-    /// tick, wake, or relaunch. Input suspends the assertion, not the deadline.
+    /// tick, wake, or relaunch. User input does not stop the assertion.
     /// The app persists the resulting deadline/state.
-    mutating func update(at date: Date, idleReady: Bool, calendar: Calendar = .current) -> Bool {
+    mutating func update(at date: Date, calendar: Calendar = .current) -> Bool {
         self = validated()
         guard enabled else {
             expiresAt = nil
@@ -69,14 +69,14 @@ struct AwakeSettings: Codable, Equatable, Sendable {
         }
         guard timerEnabled else {
             expiresAt = nil
-            return idleReady && isWithinSchedule(at: date, calendar: calendar)
+            return isWithinSchedule(at: date, calendar: calendar)
         }
         if let expiresAt, date >= expiresAt {
             enabled = false
             self.expiresAt = nil
             return false
         }
-        guard idleReady, isWithinSchedule(at: date, calendar: calendar) else { return false }
+        guard isWithinSchedule(at: date, calendar: calendar) else { return false }
         if expiresAt == nil {
             expiresAt = date.addingTimeInterval(TimeInterval(durationMinutes * 60))
         }
@@ -113,10 +113,10 @@ struct VeilSettings: Codable, Equatable, Sendable {
     var scheduleEnabled = false
     var startMinute = 22 * 60
     var endMinute = 7 * 60
-    var hideMenuBar = true
     var awake = AwakeSettings.defaults
     var iconAction = IconAction.both
     var dismissOnMouseMove = true
+    var passwordProtection = false
     var shortcut = KeyboardShortcut.defaults
 
     static let defaults = VeilSettings()
@@ -160,7 +160,7 @@ struct VeilSettings: Codable, Equatable, Sendable {
 
 extension VeilSettings {
     private enum CodingKeys: String, CodingKey {
-        case enabled, intervalMinutes, scheduleEnabled, startMinute, endMinute, hideMenuBar, awake, iconAction, dismissOnMouseMove, shortcut
+        case enabled, intervalMinutes, scheduleEnabled, startMinute, endMinute, awake, iconAction, dismissOnMouseMove, passwordProtection, shortcut
     }
 
     /// Preserve saved settings when a newer version adds an optional preference.
@@ -171,10 +171,10 @@ extension VeilSettings {
             intervalMinutes: try values.decodeIfPresent(Int.self, forKey: .intervalMinutes) ?? Self.defaults.intervalMinutes,
             scheduleEnabled: try values.decodeIfPresent(Bool.self, forKey: .scheduleEnabled) ?? Self.defaults.scheduleEnabled,
             startMinute: try values.decodeIfPresent(Int.self, forKey: .startMinute) ?? Self.defaults.startMinute,
-            endMinute: try values.decodeIfPresent(Int.self, forKey: .endMinute) ?? Self.defaults.endMinute,
-            hideMenuBar: try values.decodeIfPresent(Bool.self, forKey: .hideMenuBar) ?? Self.defaults.hideMenuBar
+            endMinute: try values.decodeIfPresent(Int.self, forKey: .endMinute) ?? Self.defaults.endMinute
         )
         dismissOnMouseMove = try values.decodeIfPresent(Bool.self, forKey: .dismissOnMouseMove) ?? true
+        passwordProtection = try values.decodeIfPresent(Bool.self, forKey: .passwordProtection) ?? false
         iconAction = try values.decodeIfPresent(IconAction.self, forKey: .iconAction) ?? .both
         shortcut = (try? values.decode(KeyboardShortcut.self, forKey: .shortcut)) ?? .defaults
         if let savedAwake = try values.decodeIfPresent(AwakeSettings.self, forKey: .awake) {
@@ -192,7 +192,7 @@ extension VeilSettings {
     }
 }
 
-/// Automatic actions share this inactivity threshold, even with blackout disabled.
+/// Automatic blackout follows the physical-input inactivity threshold.
 func isIdleReady(_ seconds: TimeInterval, settings: VeilSettings) -> Bool {
     seconds.isFinite && seconds >= TimeInterval(settings.validated().intervalMinutes * 60)
 }

@@ -60,7 +60,7 @@ final class Localization {
         }
         if let url = custom[language], let translated = readCatalog(url) {
             // Recognize previously exported defaults without rewriting user files.
-            let legacy = ["legacy-v1.2.json", "legacy-v1.3.json"].compactMap { filename in
+            let legacy = ["legacy-v1.2.json", "legacy-v1.3.json", "legacy-v1.4.json"].compactMap { filename in
                 (try? Data(contentsOf: resources.appendingPathComponent(filename))).flatMap {
                     try? JSONDecoder().decode([String: [String: String]].self, from: $0)
                 }?[language]
