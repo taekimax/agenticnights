@@ -1,0 +1,11 @@
+Generation: built-in image_gen (imagegen skill).
+Dark master: agenticnights-moon-dark-v1.png
+
+Use case: logo-brand.
+Asset type: finished square master artwork for the macOS app agenticnights, usable both as an application icon and a circular-cropped profile avatar. Generate one image, not a presentation sheet.
+Primary request: a beautifully resolved, distinctive crescent moon emblem that retains the immediate clarity of the macOS SF Symbols moon.fill menu bar symbol. Balance restraint with enough material character to avoid a bland flat glyph.
+Composition: one bold, generous crescent moon, optically centered, occupying about 62% of the square canvas. Crescent opens toward the upper right, with graceful tapered tips and a broad substantial body. Precise clean silhouette, readable at small sizes. Plenty of breathing room, safe inside a circular avatar crop. Straight-on view, no tilted app tile, no mockup.
+Backdrop: full-bleed near-black graphite background, almost uniform with only an extremely subtle soft tonal lift behind the moon. Square image; do not draw a rounded-square frame or a border.
+Material and light: a single smoothly sculpted satin-metal crescent, shallow relief with broad refined light transitions. Predominantly luminous platinum and silver, with restrained cool steel-blue shading and a very small champagne warmth on an edge. One delicate polished edge highlight gives depth, while the broad surface stays calm. Sophisticated contemporary macOS utility design. Not a photographic astronomical moon.
+Palette must echo the app's moving password text: silver #C4D1E0, platinum #E6E0CF, muted champagne #C9B38F, steel blue #96B8D1, on nearly black #080B10. Silver/platinum dominate; gold and blue are subtle reflections, not separate striped bands.
+Constraints: no text, no letters, no stars, no sparkles, no clouds, no craters, no shield, no padlock, no orbit rings, no extra symbols. No neon glow, no rainbow chrome, no busy reflections, no heavy bevel, no grunge, no decorative particles. Keep the moon's inner cutout as clean empty dark space, not a second overlapping object. High-resolution crisp finished artwork, ideally 2048 by 2048.

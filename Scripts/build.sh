@@ -11,6 +11,8 @@ xcrun swiftc -swift-version 5 -O -num-threads 2 \
   -framework AppKit -framework Carbon \
   -o "$app_bundle/Contents/MacOS/agenticnights"
 cp "$project_root/Resources/Info.plist" "$app_bundle/Contents/Info.plist"
+"$project_root/Scripts/build-icon.sh"
+cp "$build_root/AppIcon.icns" "$app_bundle/Contents/Resources/AppIcon.icns"
 cp "$project_root/LICENSE" "$app_bundle/Contents/Resources/LICENSE"
 cp "$project_root/THIRD_PARTY_NOTICES.md" "$app_bundle/Contents/Resources/THIRD_PARTY_NOTICES.md"
 # Recreate only the generated resource directory so removed catalogs cannot linger.

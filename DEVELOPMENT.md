@@ -15,6 +15,8 @@ Swift / AppKit, macOS 13+, no package dependencies. [User guide](README.md).
 
 Keep generated output in `.build/`. Preserve user settings, translations and useful evidence. Use SSH for authenticated Git operations. The installed app root must remain owner-writable; do not change payload permissions recursively.
 
+The build packages `Resources/Brand/agenticnights-moon-transparent-v1.png` into `AppIcon.icns` with `Scripts/build-icon.sh`. The source artwork, generation prompt and pixel-cleanup script remain in `Resources/Brand/`. The menu-bar moon is unchanged.
+
 ## Ownership
 
 | File | Responsibility |
