@@ -29,7 +29,7 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
     var onRecordingChanged: ((Bool) -> Void)?
 
     init() {
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 780, height: 600),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 780, height: 640),
                               styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.title = tr("settings.title")
         window.isReleasedWhenClosed = false
@@ -131,7 +131,7 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
             field.alignment = .right
             field.widthAnchor.constraint(equalToConstant: 60).isActive = true
         }
-        intervalField.setAccessibilityLabel(tr("accessibility.interval"))
+        intervalField.setAccessibilityLabel(tr("accessibility.idleDelay"))
         awakeDurationField.setAccessibilityLabel(tr("accessibility.duration"))
         for button in [scheduleButton, awakeScheduleButton, awakeTimerButton] {
             button.target = self
@@ -147,9 +147,12 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
         awakeStartPicker.setAccessibilityLabel(tr("accessibility.awakeStart"))
         awakeEndPicker.setAccessibilityLabel(tr("accessibility.awakeEnd"))
 
+        stack.addArrangedSubview(row([NSTextField(labelWithString: tr("settings.idleDelay")),
+                                     intervalField, NSTextField(labelWithString: tr("settings.minutes"))]))
+        stack.addArrangedSubview(hint(tr("settings.idleHint")))
+
         let coverBox = section(tr("feature.cover"), views: [
             enabledButton,
-            row([NSTextField(labelWithString: tr("settings.interval")), intervalField, NSTextField(labelWithString: tr("settings.minutes"))]),
             scheduleButton,
             row([NSTextField(labelWithString: tr("settings.start")), startPicker]),
             row([NSTextField(labelWithString: tr("settings.end")), endPicker]),
@@ -163,7 +166,7 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
             awakeScheduleButton,
             row([NSTextField(labelWithString: tr("settings.start")), awakeStartPicker]),
             row([NSTextField(labelWithString: tr("settings.end")), awakeEndPicker]),
-            hint(tr("settings.awakeHint"))
+            hint(tr("settings.awakeIdleHint"))
         ])
         let columns = NSStackView(views: [coverBox, awakeBox])
         columns.orientation = .horizontal
@@ -261,7 +264,7 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
         window?.makeFirstResponder(nil)
         guard let interval = Int(intervalField.stringValue.trimmingCharacters(in: .whitespaces)),
               (1...1440).contains(interval) else {
-            errorLabel.stringValue = tr("settings.invalidInterval")
+            errorLabel.stringValue = tr("settings.invalidIdleDelay")
             return
         }
         let duration = Int(awakeDurationField.stringValue.trimmingCharacters(in: .whitespaces))

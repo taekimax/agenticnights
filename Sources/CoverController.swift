@@ -18,7 +18,7 @@ final class BlackWindow: NSWindow {
 
     override func sendEvent(_ event: NSEvent) {
         // Ignore events queued before the cover was shown. Only cover windows
-        // receive movement; there is no global event tap or background polling.
+        // receive movement; dismissal does not need a global event tap.
         if dismissOnMouseMove, event.timestamp >= shownAt,
            [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged].contains(event.type) {
             dismiss?()

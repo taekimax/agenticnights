@@ -6,6 +6,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let cover = CoverController()
     private let sleepPrevention = SleepPrevention()
     private var schedule = VeilSchedule()
+    private var userActivity = UserActivity()
+    private var idleReady = false
     private var settings = VeilSettings.defaults
     private var statusItem: NSStatusItem!
     private var timer: Timer?
@@ -97,6 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             observers.append(workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 self?.sleeping = false
                 self?.schedule.reset()
+                self?.userActivity.reset()
                 self?.tick()
             })
         }
@@ -104,7 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             object: nil, queue: .main) { [weak self] _ in self?.sessionActive = false; self?.suspend() })
         observers.append(workspace.addObserver(forName: NSWorkspace.sessionDidBecomeActiveNotification,
             object: nil, queue: .main) { [weak self] _ in
-                self?.sessionActive = true; self?.schedule.reset(); self?.tick()
+                self?.sessionActive = true; self?.schedule.reset(); self?.userActivity.reset(); self?.tick()
             })
         observers.append(NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
@@ -115,6 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func suspend() {
         cover.hide(restorePrevious: false)
         schedule.reset()
+        idleReady = false
         sleepPrevention.stop()
         refreshStatus()
     }
@@ -131,20 +135,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func tick() {
         guard sessionActive, !sleeping else { return }
         let now = Date()
+        let idleSeconds = userActivity.idleSeconds()
+        idleReady = isIdleReady(idleSeconds, settings: settings) &&
+            settingsWindow?.window?.isVisible != true && !menuIsOpen
         let wasActive = schedule.active
-        let due = schedule.tick(now: now, settings: settings)
+        let due = schedule.tick(now: now, settings: settings, idleSeconds: idleSeconds)
         if wasActive && !schedule.active { cover.hide(restorePrevious: true) }
-        updateAwake()
-        if due {
-            if settingsWindow?.window?.isVisible != true && !menuIsOpen { showCover() }
-            // The scheduling clock keeps advancing while settings are open.
-        }
+        updateAwake(now: now)
+        if due && idleReady && !cover.isCovered { showCover() }
         refreshStatus()
     }
 
-    private func updateAwake() {
+    private func updateAwake(now: Date) {
         let previous = settings.awake
-        let active = settings.awake.update(at: Date())
+        let active = settings.awake.update(at: now, idleReady: idleReady)
         if settings.awake != previous { persistSettings() }
         if sessionActive && !sleeping && active { sleepPrevention.start() }
         else { sleepPrevention.stop() }
@@ -168,6 +172,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !sessionActive || sleeping { return tr("status.paused") }
         if !settings.awake.isWithinSchedule(at: Date()) { return tr("status.outsideSchedule") }
         if let error = sleepPrevention.lastError { return tr("status.error", ["error": error]) }
+        if !idleReady { return tr("status.waitingForIdle") }
         if let deadline = settings.awake.expiresAt {
             let formatter = DateFormatter()
             formatter.dateFormat = "HH:mm:ss"
@@ -208,7 +213,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let awake = menu.addItem(withTitle: tr("settings.enableAwake"), action: #selector(toggleAwakeEnabled), keyEquivalent: "")
         awake.target = self
         awake.state = settings.awake.enabled ? .on : .off
-        let interval = menu.addItem(withTitle: tr("menu.interval", ["minutes": String(settings.intervalMinutes)]), action: nil, keyEquivalent: "")
+        let interval = menu.addItem(withTitle: tr("menu.idleDelay", ["minutes": String(settings.intervalMinutes)]), action: nil, keyEquivalent: "")
         let intervals = NSMenu()
         intervals.autoenablesItems = false
         for minutes in [5, 10, 15, 30, 60] {
@@ -218,7 +223,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.state = settings.intervalMinutes == minutes ? .on : .off
         }
         intervals.addItem(.separator())
-        let custom = intervals.addItem(withTitle: tr("menu.customInterval"), action: #selector(showSettings), keyEquivalent: "")
+        let custom = intervals.addItem(withTitle: tr("menu.customIdleDelay"), action: #selector(showSettings), keyEquivalent: "")
         custom.target = self
         interval.submenu = intervals
         let movement = menu.addItem(withTitle: tr("menu.dismissOnMouseMove"), action: #selector(toggleMouseMove), keyEquivalent: "")
@@ -391,6 +396,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             "startMinute": settings.startMinute, "endMinute": settings.endMinute,
             "scheduleActive": schedule.active, "covered": cover.isCovered,
             "awakeAssertion": sleepPrevention.isRunning, "windows": displayFrames,
+            "idleReady": idleReady,
             "awakeEnabled": settings.awake.enabled, "awakeTimerEnabled": settings.awake.timerEnabled,
             "awakeDurationMinutes": settings.awake.durationMinutes,
             "awakeScheduleEnabled": settings.awake.scheduleEnabled,

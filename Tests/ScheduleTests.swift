@@ -23,6 +23,12 @@ enum ScheduleTests {
     static func main() throws {
         let tests: [(String, () throws -> Void)] = [
             ("defaults and first interval", firstInterval),
+            ("five-minute idle delay follows the latest input", latestInput),
+            ("continued input prevents both automatic actions", continuousInput),
+            ("launch uses elapsed input time", launchIdle),
+            ("awake countdown waits for idle and preserves its deadline", awakeIdleDeadline),
+            ("awake-only mode shares the inactivity delay", awakeOnlyIdle),
+            ("invalid input samples cannot start automatic actions", invalidIdleSamples),
             ("daytime schedule boundaries", daytimeBoundaries),
             ("overnight schedule boundaries", overnightBoundaries),
             ("disabled and all-day states", activationStates),
@@ -32,8 +38,8 @@ enum ScheduleTests {
             ("legacy settings preserve values and gain defaults", legacySettings),
             ("late callback emits once", overdueCallback),
             ("end of schedule cancels a due cover", endCancelsCover),
-            ("next day starts a new interval", nextDay),
-            ("settings reset applies new interval", intervalChange),
+            ("schedule entry uses the last input", nextDay),
+            ("settings change uses elapsed input time", intervalChange),
             ("manual cover postpones the next cover", manualCover),
             ("reset discards elapsed sleep time", sleepReset),
             ("awake and cover controls are independent", independentAwake),
@@ -62,10 +68,10 @@ enum ScheduleTests {
         try expect(settings.enabled && settings.intervalMinutes == 10 && !settings.scheduleEnabled && settings.hideMenuBar, "Unexpected defaults")
         var scheduler = VeilSchedule()
         let start = date(10)
-        try expect(!scheduler.tick(now: start, settings: settings, calendar: utc), "Enabling must wait a full interval")
+        try expect(!scheduler.tick(now: start, settings: settings, idleSeconds: 0, calendar: utc), "Enabling must wait a full interval")
         try expect(scheduler.active && scheduler.nextCover == date(10, 10), "First due time must be ten minutes later")
-        try expect(!scheduler.tick(now: date(10, 9, 59), settings: settings, calendar: utc), "Must not fire early")
-        try expect(scheduler.tick(now: date(10, 10), settings: settings, calendar: utc), "Must fire at exact due time")
+        try expect(!scheduler.tick(now: date(10, 9, 59), settings: settings, idleSeconds: 599, calendar: utc), "Must not fire early")
+        try expect(scheduler.tick(now: date(10, 10), settings: settings, idleSeconds: 600, calendar: utc), "Must fire at exact due time")
         try expect(scheduler.nextCover == date(10, 20), "Next interval must advance")
     }
 
@@ -96,8 +102,8 @@ enum ScheduleTests {
             try expect(noSchedule.isActive(at: date(hour), calendar: utc), "Disabled time restriction means all day")
         }
         var scheduler = VeilSchedule()
-        _ = scheduler.tick(now: date(10), settings: .defaults, calendar: utc)
-        try expect(!scheduler.tick(now: date(10, 10), settings: disabled, calendar: utc), "Turning off at due time must not cover")
+        _ = scheduler.tick(now: date(10), settings: .defaults, idleSeconds: 0, calendar: utc)
+        try expect(!scheduler.tick(now: date(10, 10), settings: disabled, idleSeconds: 600, calendar: utc), "Turning off at due time must not cover")
         try expect(!scheduler.active && scheduler.nextCover == nil, "Off must clear the scheduled cover")
     }
 
@@ -148,56 +154,137 @@ enum ScheduleTests {
 
     private static func overdueCallback() throws {
         var scheduler = VeilSchedule()
-        _ = scheduler.tick(now: date(10), settings: .defaults, calendar: utc)
-        try expect(scheduler.tick(now: date(12), settings: .defaults, calendar: utc), "One late callback should cover once")
+        _ = scheduler.tick(now: date(10), settings: .defaults, idleSeconds: 0, calendar: utc)
+        try expect(scheduler.tick(now: date(12), settings: .defaults, idleSeconds: 7200, calendar: utc), "One late callback should cover once")
         try expect(scheduler.nextCover == date(12, 10), "Late callback starts a fresh interval")
-        try expect(!scheduler.tick(now: date(12), settings: .defaults, calendar: utc), "Same timestamp must not drain a backlog")
-        try expect(!scheduler.tick(now: date(12, 1), settings: .defaults, calendar: utc), "No immediate catch-up cover")
+        try expect(!scheduler.tick(now: date(12), settings: .defaults, idleSeconds: 7200, calendar: utc), "Same timestamp must not drain a backlog")
+        try expect(!scheduler.tick(now: date(12, 1), settings: .defaults, idleSeconds: 7260, calendar: utc), "No immediate catch-up cover")
     }
 
     private static func endCancelsCover() throws {
         let settings = VeilSettings(scheduleEnabled: true, startMinute: 9 * 60, endMinute: 17 * 60)
         var scheduler = VeilSchedule()
-        _ = scheduler.tick(now: date(16, 50), settings: settings, calendar: utc)
-        try expect(!scheduler.tick(now: date(17), settings: settings, calendar: utc), "Schedule end wins over an exactly due cover")
+        _ = scheduler.tick(now: date(16, 50), settings: settings, idleSeconds: 0, calendar: utc)
+        try expect(!scheduler.tick(now: date(17), settings: settings, idleSeconds: 600, calendar: utc), "Schedule end wins over an exactly due cover")
         try expect(scheduler.nextCover == nil && !scheduler.active, "End clears active state")
     }
 
     private static func nextDay() throws {
         let settings = VeilSettings(scheduleEnabled: true, startMinute: 9 * 60, endMinute: 17 * 60)
         var scheduler = VeilSchedule()
-        _ = scheduler.tick(now: date(16, 50), settings: settings, calendar: utc)
-        _ = scheduler.tick(now: date(17), settings: settings, calendar: utc)
-        try expect(!scheduler.tick(now: date(9, day: 29), settings: settings, calendar: utc), "Reentering time range waits a full interval")
-        try expect(scheduler.nextCover == date(9, 10, day: 29), "New day must have a new due time")
+        _ = scheduler.tick(now: date(16, 50), settings: settings, idleSeconds: 0, calendar: utc)
+        _ = scheduler.tick(now: date(17), settings: settings, idleSeconds: 600, calendar: utc)
+        try expect(scheduler.tick(now: date(9, day: 29), settings: settings, idleSeconds: 900, calendar: utc), "Opening scheduled hours may cover when the user is already idle")
+        try expect(scheduler.nextCover == date(9, 10, day: 29), "Next cover follows the completed cover")
     }
 
     private static func intervalChange() throws {
         var scheduler = VeilSchedule()
-        _ = scheduler.tick(now: date(10), settings: .defaults, calendar: utc)
+        _ = scheduler.tick(now: date(10), settings: .defaults, idleSeconds: 0, calendar: utc)
         scheduler.reset()
         try expect(!scheduler.active && scheduler.nextCover == nil, "Reset clears state")
         let settings = VeilSettings(intervalMinutes: 3)
-        _ = scheduler.tick(now: date(10, 2), settings: settings, calendar: utc)
-        try expect(scheduler.nextCover == date(10, 5), "Changed interval starts at reset time")
+        _ = scheduler.tick(now: date(10, 2), settings: settings, idleSeconds: 120, calendar: utc)
+        try expect(scheduler.nextCover == date(10, 3), "Changed interval remains measured from the last input at 10:00")
     }
 
     private static func manualCover() throws {
         var scheduler = VeilSchedule()
         scheduler.didCover(at: date(10), settings: .defaults)
         try expect(scheduler.nextCover == nil && !scheduler.active, "Manual cover must not enable a disabled scheduler")
-        _ = scheduler.tick(now: date(10), settings: .defaults, calendar: utc)
+        _ = scheduler.tick(now: date(10), settings: .defaults, idleSeconds: 0, calendar: utc)
         scheduler.didCover(at: date(10, 5), settings: .defaults)
         try expect(scheduler.nextCover == date(10, 15), "Manual cover restarts interval")
-        try expect(!scheduler.tick(now: date(10, 10), settings: .defaults, calendar: utc), "Old due time must no longer cover")
+        try expect(!scheduler.tick(now: date(10, 10), settings: .defaults, idleSeconds: 600, calendar: utc), "Old due time must no longer cover")
     }
 
     private static func sleepReset() throws {
+        var activity = UserActivity()
         var scheduler = VeilSchedule()
-        _ = scheduler.tick(now: date(10), settings: .defaults, calendar: utc)
-        scheduler.reset()
-        try expect(!scheduler.tick(now: date(14), settings: .defaults, calendar: utc), "Wake must not immediately replay overdue cover")
-        try expect(scheduler.nextCover == date(14, 10), "Wake starts a full interval")
+        activity.reset(uptime: 1000)
+        let atWake = activity.elapsed(systemIdle: 14_400, uptime: 1000)
+        try expect(!scheduler.tick(now: date(14), settings: .defaults, idleSeconds: atWake, calendar: utc), "Sleep time must not trigger an immediate cover on wake")
+        try expect(scheduler.nextCover == date(14, 10), "Wake starts a full quiet interval")
+        let later = activity.elapsed(systemIdle: 15_000, uptime: 1600)
+        try expect(scheduler.tick(now: date(14, 10), settings: .defaults, idleSeconds: later, calendar: utc), "A full quiet interval after wake is eligible")
+        try expect(activity.elapsed(systemIdle: 2, uptime: 1602) == 2, "New input after wake takes precedence over elapsed wake time")
+        activity.reset(uptime: 2000)
+        try expect(activity.elapsed(systemIdle: 3000, uptime: 2001) == 1, "A later session resume resets the cap again")
+    }
+
+    private static func latestInput() throws {
+        let settings = VeilSettings(intervalMinutes: 5)
+        var scheduler = VeilSchedule()
+        try expect(!scheduler.tick(now: date(10, 4), settings: settings, idleSeconds: 240, calendar: utc), "Four quiet minutes must wait")
+        try expect(scheduler.nextCover == date(10, 5), "Initial deadline follows the input at 10:00")
+        // A mouse, keyboard, or trackpad event arrives at 10:04:59.
+        try expect(!scheduler.tick(now: date(10, 5), settings: settings, idleSeconds: 1, calendar: utc), "Input just before the old deadline must cancel that deadline")
+        try expect(scheduler.nextCover == date(10, 9, 59), "Five minutes must be measured from the latest event")
+        try expect(!scheduler.tick(now: date(10, 9, 58), settings: settings, idleSeconds: 299, calendar: utc), "The restarted delay must not fire early")
+        try expect(scheduler.tick(now: date(10, 9, 59), settings: settings, idleSeconds: 300, calendar: utc), "Exactly five quiet minutes permits blackout")
+    }
+
+    private static func continuousInput() throws {
+        var settings = VeilSettings(intervalMinutes: 5, awake: AwakeSettings(timerEnabled: true, durationMinutes: 30))
+        var scheduler = VeilSchedule()
+        for minute in 0..<60 {
+            let now = date(10).addingTimeInterval(TimeInterval(minute * 60))
+            let idle = TimeInterval(minute % 4)
+            try expect(!scheduler.tick(now: now, settings: settings, idleSeconds: idle, calendar: utc), "An hour of ongoing input must never black out")
+            let ready = isIdleReady(idle, settings: settings)
+            try expect(!settings.awake.update(at: now, idleReady: ready, calendar: utc), "Ongoing input must never start sleep prevention")
+            try expect(settings.awake.expiresAt == nil && settings.awake.enabled, "Waiting for inactivity must not spend the stop timer")
+        }
+    }
+
+    private static func launchIdle() throws {
+        let activity = UserActivity()
+        let settings = VeilSettings(intervalMinutes: 5)
+        var scheduler = VeilSchedule()
+        let idle = activity.elapsed(systemIdle: 240, uptime: 20_000)
+        try expect(!scheduler.tick(now: date(10), settings: settings, idleSeconds: idle, calendar: utc), "Launch after four quiet minutes waits only the remaining minute")
+        try expect(scheduler.nextCover == date(10, 1), "App launch must not restart the input clock")
+        var alreadyIdle = VeilSchedule()
+        try expect(alreadyIdle.tick(now: date(10), settings: settings, idleSeconds: 600, calendar: utc), "Launch after sufficient inactivity can cover immediately")
+    }
+
+    private static func awakeIdleDeadline() throws {
+        var awake = AwakeSettings(timerEnabled: true, durationMinutes: 30)
+        try expect(!awake.update(at: date(10), idleReady: false, calendar: utc), "Enabling while in use waits for inactivity")
+        try expect(awake.expiresAt == nil, "The finite timer remains pending")
+        try expect(awake.update(at: date(10, 5), idleReady: true, calendar: utc), "First idle activation starts sleep prevention")
+        try expect(awake.expiresAt == date(10, 35), "The deadline starts at actual idle activation")
+        try expect(!awake.update(at: date(10, 6), idleReady: false, calendar: utc), "Resumed use releases sleep prevention")
+        try expect(awake.enabled && awake.expiresAt == date(10, 35), "Resumed use preserves the enabled preference and deadline")
+        try expect(awake.update(at: date(10, 11), idleReady: true, calendar: utc), "Another quiet period can reactivate before expiry")
+        try expect(awake.expiresAt == date(10, 35), "Reactivation must not renew the deadline")
+        try expect(!awake.update(at: date(10, 35), idleReady: false, calendar: utc), "Deadline expires even while the user is active")
+        try expect(!awake.enabled && awake.expiresAt == nil, "Expiry disables the finite session while waiting")
+    }
+
+    private static func awakeOnlyIdle() throws {
+        var settings = VeilSettings(enabled: false, intervalMinutes: 5)
+        var scheduler = VeilSchedule()
+        for idle in [0.0, 299.0, 300.0] {
+            let now = date(10).addingTimeInterval(idle)
+            try expect(!scheduler.tick(now: now, settings: settings, idleSeconds: idle, calendar: utc), "Awake-only mode must not enable blackout")
+            let ready = isIdleReady(idle, settings: settings)
+            let awake = settings.awake.update(at: now, idleReady: ready, calendar: utc)
+            try expect(awake == (idle == 300), "Awake-only mode still waits five quiet minutes")
+        }
+        try expect(!settings.awake.update(at: date(10, 6), idleReady: isIdleReady(0, settings: settings), calendar: utc), "New input stops indefinite sleep prevention too")
+    }
+
+    private static func invalidIdleSamples() throws {
+        let activity = UserActivity()
+        let settings = VeilSettings(intervalMinutes: 5)
+        for invalid in [-1.0, Double.nan, Double.infinity, -Double.infinity] {
+            var scheduler = VeilSchedule()
+            var awake = settings.awake
+            try expect(activity.elapsed(systemIdle: invalid, uptime: 1000) == 0, "Invalid system readings must behave as recent input")
+            try expect(!scheduler.tick(now: date(10), settings: settings, idleSeconds: invalid, calendar: utc), "Invalid samples cannot black out")
+            try expect(!awake.update(at: date(10), idleReady: isIdleReady(invalid, settings: settings), calendar: utc), "Invalid samples cannot start sleep prevention")
+        }
     }
 
     private static func independentAwake() throws {
@@ -206,15 +293,15 @@ enum ScheduleTests {
             awake: AwakeSettings(scheduleEnabled: true)
         )
         try expect(settings.isActive(at: date(10), calendar: utc), "Cover has daytime hours")
-        try expect(!settings.awake.update(at: date(10), calendar: utc), "Awake has separate overnight hours")
+        try expect(!settings.awake.update(at: date(10), idleReady: true, calendar: utc), "Awake has separate overnight hours")
         try expect(!settings.isActive(at: date(23), calendar: utc), "Cover must stop outside its own hours")
-        try expect(settings.awake.update(at: date(23), calendar: utc), "Awake can run while cover is inactive")
+        try expect(settings.awake.update(at: date(23), idleReady: true, calendar: utc), "Awake can run while cover is inactive")
         settings.enabled = false
-        try expect(settings.awake.update(at: date(23), calendar: utc), "Turning off covers must not stop awake")
+        try expect(settings.awake.update(at: date(23), idleReady: true, calendar: utc), "Turning off covers must not stop awake")
         settings.enabled = true
         settings.awake.enabled = false
         try expect(settings.isActive(at: date(10), calendar: utc), "Turning off awake must not stop daytime covers")
-        try expect(!settings.awake.update(at: date(23), calendar: utc), "Awake toggle must stop only awake")
+        try expect(!settings.awake.update(at: date(23), idleReady: true, calendar: utc), "Awake toggle must stop only awake")
         let restored = try JSONDecoder().decode(VeilSettings.self, from: JSONEncoder().encode(settings))
         try expect(restored == settings, "Explicit independent settings must survive saving without legacy migration")
     }
@@ -222,67 +309,67 @@ enum ScheduleTests {
     private static func awakeTimer() throws {
         var awake = AwakeSettings(timerEnabled: true, durationMinutes: 30)
         try expect(awake.isActive(at: date(9), calendar: utc) && awake.expiresAt == nil, "Read-only eligibility must not start a timer")
-        try expect(awake.update(at: date(9), calendar: utc), "Eligible timer should start")
+        try expect(awake.update(at: date(9), idleReady: true, calendar: utc), "Eligible timer should start")
         try expect(awake.expiresAt == date(9, 30), "Deadline must use selected duration")
-        try expect(awake.update(at: date(9, 15), calendar: utc), "Timer remains active before expiry")
+        try expect(awake.update(at: date(9, 15), idleReady: true, calendar: utc), "Timer remains active before expiry")
         try expect(awake.expiresAt == date(9, 30), "Ticks must not renew the deadline")
         try expect(!awake.isActive(at: date(9, 30), calendar: utc), "Read-only state must exclude exact expiry")
-        try expect(!awake.update(at: date(9, 30), calendar: utc), "Exact expiry stops assertion")
+        try expect(!awake.update(at: date(9, 30), idleReady: true, calendar: utc), "Exact expiry stops assertion")
         try expect(!awake.enabled && awake.expiresAt == nil, "Expiry must turn off the toggle and clear deadline")
-        try expect(!awake.update(at: date(10), calendar: utc), "Later ticks must not restart an expired timer")
+        try expect(!awake.update(at: date(10), idleReady: true, calendar: utc), "Later ticks must not restart an expired timer")
         awake.enabled = true
-        try expect(awake.update(at: date(11), calendar: utc), "Explicitly enabling again starts a new session")
+        try expect(awake.update(at: date(11), idleReady: true, calendar: utc), "Explicitly enabling again starts a new session")
         try expect(awake.expiresAt == date(11, 30), "Restart deadline begins at explicit activation")
     }
 
     private static func awakeTimerPersistence() throws {
         var settings = VeilSettings(awake: AwakeSettings(timerEnabled: true, durationMinutes: 60))
-        _ = settings.awake.update(at: date(10), calendar: utc)
+        _ = settings.awake.update(at: date(10), idleReady: true, calendar: utc)
         let saved = try JSONEncoder().encode(settings)
         var relaunched = try JSONDecoder().decode(VeilSettings.self, from: saved)
-        try expect(relaunched.awake.update(at: date(10, 45), calendar: utc), "Restart before deadline must keep assertion active")
+        try expect(relaunched.awake.update(at: date(10, 45), idleReady: true, calendar: utc), "Restart before deadline must keep assertion active")
         try expect(relaunched.awake.expiresAt == date(11), "Relaunch must preserve original deadline")
         var lateRelaunch = try JSONDecoder().decode(VeilSettings.self, from: saved)
-        try expect(!lateRelaunch.awake.update(at: date(12), calendar: utc), "Relaunch after expiry must stay off")
+        try expect(!lateRelaunch.awake.update(at: date(12), idleReady: true, calendar: utc), "Relaunch after expiry must stay off")
         try expect(!lateRelaunch.awake.enabled && lateRelaunch.awake.expiresAt == nil, "Expired persisted state must be consumed")
     }
 
     private static func awakeTimerPending() throws {
         var awake = AwakeSettings(timerEnabled: true, durationMinutes: 60, scheduleEnabled: true, startMinute: 9 * 60, endMinute: 17 * 60)
-        try expect(!awake.update(at: date(8), calendar: utc), "Enabling outside operating hours must wait")
+        try expect(!awake.update(at: date(8), idleReady: true, calendar: utc), "Enabling outside operating hours must wait")
         try expect(awake.enabled && awake.expiresAt == nil, "Pending timer must not spend its duration early")
         let pending = try JSONEncoder().encode(awake)
         awake = try JSONDecoder().decode(AwakeSettings.self, from: pending)
-        try expect(!awake.update(at: date(8, 59, 59), calendar: utc) && awake.expiresAt == nil, "Relaunch while waiting must remain pending")
-        try expect(awake.update(at: date(9), calendar: utc), "Operating hours trigger first activation")
+        try expect(!awake.update(at: date(8, 59, 59), idleReady: true, calendar: utc) && awake.expiresAt == nil, "Relaunch while waiting must remain pending")
+        try expect(awake.update(at: date(9), idleReady: true, calendar: utc), "Operating hours trigger first activation")
         try expect(awake.expiresAt == date(10), "Countdown starts at first actual activation")
     }
 
     private static func awakeTimerOutsideHours() throws {
         var awake = AwakeSettings(timerEnabled: true, durationMinutes: 60, scheduleEnabled: true, startMinute: 9 * 60, endMinute: 17 * 60)
-        _ = awake.update(at: date(16, 30), calendar: utc)
-        try expect(!awake.update(at: date(17), calendar: utc), "Daily end releases assertion")
+        _ = awake.update(at: date(16, 30), idleReady: true, calendar: utc)
+        try expect(!awake.update(at: date(17), idleReady: true, calendar: utc), "Daily end releases assertion")
         try expect(awake.enabled && awake.expiresAt == date(17, 30), "Daily end must retain the running deadline")
-        try expect(!awake.update(at: date(17, 30), calendar: utc), "Deadline must expire even outside operating hours")
+        try expect(!awake.update(at: date(17, 30), idleReady: true, calendar: utc), "Deadline must expire even outside operating hours")
         try expect(!awake.enabled && awake.expiresAt == nil, "Outside-hours expiry must disable awake")
-        try expect(!awake.update(at: date(9, day: 29), calendar: utc), "Expired timer must not restart next day")
+        try expect(!awake.update(at: date(9, day: 29), idleReady: true, calendar: utc), "Expired timer must not restart next day")
 
         var longTimer = AwakeSettings(timerEnabled: true, durationMinutes: 1_440, scheduleEnabled: true)
-        _ = longTimer.update(at: date(23), calendar: utc)
-        try expect(!longTimer.update(at: date(8, day: 29), calendar: utc), "Overnight timer pauses assertion during daytime")
-        try expect(longTimer.update(at: date(22, day: 29), calendar: utc), "Unexpired timer can reenter operating hours")
+        _ = longTimer.update(at: date(23), idleReady: true, calendar: utc)
+        try expect(!longTimer.update(at: date(8, day: 29), idleReady: true, calendar: utc), "Overnight timer pauses assertion during daytime")
+        try expect(longTimer.update(at: date(22, day: 29), idleReady: true, calendar: utc), "Unexpired timer can reenter operating hours")
         try expect(longTimer.expiresAt == date(23, day: 29), "Reentering hours must not renew original deadline")
     }
 
     private static func awakeTimerDisabled() throws {
         var awake = AwakeSettings(timerEnabled: true, expiresAt: date(11))
         awake.enabled = false
-        try expect(!awake.update(at: date(10), calendar: utc) && awake.expiresAt == nil, "Disabling awake must clear its timer")
+        try expect(!awake.update(at: date(10), idleReady: true, calendar: utc) && awake.expiresAt == nil, "Disabling awake must clear its timer")
         awake = AwakeSettings(timerEnabled: false, expiresAt: date(9))
-        try expect(awake.update(at: date(10), calendar: utc), "Disabling timer chooses indefinite operation")
+        try expect(awake.update(at: date(10), idleReady: true, calendar: utc), "Disabling timer chooses indefinite operation")
         try expect(awake.enabled && awake.expiresAt == nil, "A stale deadline must not turn off indefinite operation")
         awake = AwakeSettings(timerEnabled: false, scheduleEnabled: true, expiresAt: date(11))
-        try expect(!awake.update(at: date(10), calendar: utc), "Indefinite awake still respects hours")
+        try expect(!awake.update(at: date(10), idleReady: true, calendar: utc), "Indefinite awake still respects hours")
         try expect(awake.enabled && awake.expiresAt == nil, "Timer disabled outside hours still clears deadline")
     }
 

@@ -59,8 +59,9 @@ struct AwakeSettings: Codable, Equatable, Sendable {
 
     /// The finite timer measures elapsed time, including hours outside the daily
     /// range. It starts only on the first actual activation and never renews on
-    /// tick, wake, or relaunch. The app persists the resulting deadline/state.
-    mutating func update(at date: Date, calendar: Calendar = .current) -> Bool {
+    /// tick, wake, or relaunch. Input suspends the assertion, not the deadline.
+    /// The app persists the resulting deadline/state.
+    mutating func update(at date: Date, idleReady: Bool, calendar: Calendar = .current) -> Bool {
         self = validated()
         guard enabled else {
             expiresAt = nil
@@ -68,14 +69,14 @@ struct AwakeSettings: Codable, Equatable, Sendable {
         }
         guard timerEnabled else {
             expiresAt = nil
-            return isWithinSchedule(at: date, calendar: calendar)
+            return idleReady && isWithinSchedule(at: date, calendar: calendar)
         }
         if let expiresAt, date >= expiresAt {
             enabled = false
             self.expiresAt = nil
             return false
         }
-        guard isWithinSchedule(at: date, calendar: calendar) else { return false }
+        guard idleReady, isWithinSchedule(at: date, calendar: calendar) else { return false }
         if expiresAt == nil {
             expiresAt = date.addingTimeInterval(TimeInterval(durationMinutes * 60))
         }
@@ -191,20 +192,28 @@ extension VeilSettings {
     }
 }
 
-/// The app calls `reset()` after changing settings and on wake.
-/// Late timer callbacks emit once and start a fresh interval, never a backlog.
+/// Automatic actions share this inactivity threshold, even with blackout disabled.
+func isIdleReady(_ seconds: TimeInterval, settings: VeilSettings) -> Bool {
+    seconds.isFinite && seconds >= TimeInterval(settings.validated().intervalMinutes * 60)
+}
+
+/// Input postpones blackout until a full quiet interval has elapsed.
+/// A manual/automatic cover also prevents repeated covers within one interval.
 struct VeilSchedule: Sendable {
     private(set) var nextCover: Date?
     private(set) var active = false
+    private var lastCover: Date?
 
     mutating func reset() {
         nextCover = nil
         active = false
+        lastCover = nil
     }
 
     mutating func tick(
         now: Date,
         settings: VeilSettings,
+        idleSeconds: TimeInterval,
         calendar: Calendar = .current
     ) -> Bool {
         let settings = settings.validated()
@@ -213,19 +222,19 @@ struct VeilSchedule: Sendable {
             return false
         }
 
-        if !active || nextCover == nil {
-            active = true
-            nextCover = now.addingTimeInterval(TimeInterval(settings.intervalMinutes * 60))
-            return false
-        }
-
-        guard let due = nextCover, now >= due else { return false }
-        nextCover = now.addingTimeInterval(TimeInterval(settings.intervalMinutes * 60))
+        active = true
+        let interval = TimeInterval(settings.intervalMinutes * 60)
+        let idle = idleSeconds.isFinite && idleSeconds >= 0 ? idleSeconds : 0
+        let inputDeadline = now.addingTimeInterval(max(0, interval - idle))
+        nextCover = max(inputDeadline, lastCover?.addingTimeInterval(interval) ?? inputDeadline)
+        guard isIdleReady(idleSeconds, settings: settings), let due = nextCover, now >= due else { return false }
+        didCover(at: now, settings: settings)
         return true
     }
 
     mutating func didCover(at date: Date, settings: VeilSettings) {
         guard active else { return }
+        lastCover = date
         nextCover = date.addingTimeInterval(TimeInterval(settings.validated().intervalMinutes * 60))
     }
 }
