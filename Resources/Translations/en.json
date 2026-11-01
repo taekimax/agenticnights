@@ -27,6 +27,8 @@
   "blackout.requireAuth": "Require Touch ID or password to end the blackout",
   "blackout.requireAuthHint": "Uses Touch ID or your Mac login password.",
   "blackout.authReason": "end the blackout",
+  "blackout.requireAuthOffHint": "Turning this off also requires Touch ID or your password. Other settings change without authentication.",
+  "blackout.disableAuthReason": "turn off authentication for ending the blackout",
   "blackout.voiceOver": "Turning on VoiceOver during a blackout locks your Mac.",
   "blackout.dim": "The built-in display is dimmed during a blackout.",
   "blackout.shortcut": "Blackout shortcut",

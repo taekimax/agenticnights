@@ -170,7 +170,7 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate, NSTextFieldDel
             hint("blackout.about"), enabledButton,
             row([NSTextField(labelWithString: tr("blackout.delay")), intervalField, minutesLabel()]),
             delayError, hint("blackout.delayHint"), hint("blackout.end"),
-            protectionButton, hint("blackout.requireAuthHint"),
+            protectionButton, hint("blackout.requireAuthHint"), hint("blackout.requireAuthOffHint"),
             row([NSTextField(labelWithString: tr("blackout.shortcut")), shortcutButton, reset]),
             shortcutError, hint("blackout.shortcutHint"), hint("settings.shortcutHint"),
             hint("blackout.voiceOver"), hint("blackout.dim")

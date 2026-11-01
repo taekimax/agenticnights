@@ -1,4 +1,5 @@
 import AppKit
+import LocalAuthentication
 import OSLog
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
@@ -27,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var privacyError: String?
     private var dismissalMouseNumber: Int64?
     private var lastStatusData: Data?
+    private var settingsAuthentication: LAContext?
     private let statusURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/agenticnights/status.json")
     private var sessionAvailable: Bool { sessionActive && !sleeping && !displaySleeping && !screenLocked }
@@ -300,6 +302,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func showCover() {
         guard sessionAvailable, !privacy.isCovered else { return }
+        // Blackout closes Settings; its pending prompt must not linger offscreen.
+        settingsAuthentication?.invalidate(); settingsAuthentication = nil
         settingsWindow?.close()
         idleTimer?.invalidate(); idleTimer = nil
         do {
@@ -341,17 +345,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         refreshStatus()
     }
 
-    private func applySettings(_ newSettings: VeilSettings) -> String? {
-        // Sleep settings remain independently usable during blackout. Changing
-        // authentication/blackout behavior requires ending protected blackout.
-        if privacy.isLocked && (newSettings.requireAuthentication != settings.requireAuthentication ||
-            newSettings.enabled != settings.enabled || newSettings.intervalMinutes != settings.intervalMinutes ||
-            newSettings.shortcut != settings.shortcut || newSettings.iconAction != settings.iconAction) {
-            privacy.requestUnlock()
-            return tr("status.blackedOut")
-        }
+    private func applySettings(_ newSettings: VeilSettings, authenticated: Bool = false) -> String? {
         let old = settings
         let candidate = newSettings.validated()
+        // Only turning account authentication off is protected. Every other
+        // setting, including sleep prevention, changes without a prompt.
+        if old.requireAuthentication && !candidate.requireAuthentication && !authenticated {
+            return authenticateDisablingProtection()
+        }
         if candidate.requireAuthentication && !old.requireAuthentication,
            let reason = PrivacyLockController.authenticationUnavailableReason() { return reason }
         if candidate.shortcut != old.shortcut || shortcut?.registrationStatus != noErr {
@@ -365,6 +366,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         persistSettings()
         updateState()
         return nil
+    }
+
+    /// Returns "" while the system prompt is open: SettingsWindow keeps the
+    /// previous value without an error and receives the result via updateStatus.
+    private func authenticateDisablingProtection() -> String? {
+        guard settingsAuthentication == nil else { return "" }
+        let context = LAContext()
+        var error: NSError?
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
+            context.invalidate()
+            // Nobody can authenticate an account without a login password.
+            guard PrivacyLockController.isPasscodeNotSet(error) else {
+                return (error ?? LAError(.passcodeNotSet) as NSError).localizedDescription
+            }
+            var updated = settings; updated.requireAuthentication = false
+            return applySettings(updated, authenticated: true)
+        }
+        settingsAuthentication = context
+        context.evaluatePolicy(.deviceOwnerAuthentication,
+                               localizedReason: tr("blackout.disableAuthReason")) { [weak self] success, _ in
+            DispatchQueue.main.async {
+                guard let self, self.settingsAuthentication === context else { return }
+                self.settingsAuthentication = nil
+                guard success, !self.terminating, self.settings.requireAuthentication else { return }
+                var updated = self.settings; updated.requireAuthentication = false
+                _ = self.applySettings(updated, authenticated: true)
+            }
+        }
+        return ""
     }
 
     private func persistSettings() {
@@ -407,6 +437,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         terminating = true
         idleTimer?.invalidate(); awakeTimer?.invalidate()
         terminationSignal?.cancel()
+        settingsAuthentication?.invalidate(); settingsAuthentication = nil
         privacy.shutdown()
         sleepPrevention.stop()
         schedule.reset()

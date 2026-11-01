@@ -8,7 +8,7 @@
 
 Screen blackout and sleep prevention for macOS, without a system permission grant.
 
-**2.0.0 · build 14 · macOS 13+ · English / Korean · MIT**
+**2.0.1 · build 15 · macOS 13+ · English / Korean · MIT**
 
 ### Install
 
@@ -41,7 +41,7 @@ Blackout sets display gamma to zero, so compatible agents can still capture and 
 
 **Click to end blackout.** Mouse movement, scrolling and typing leave it in place. Keyboard input and the first click pass through to the front app. Normal synthetic agent clicks leave blackout in place; agents sending hardware-source events may be treated as human input.
 
-Enable **Require Touch ID or password to end the blackout** to use the macOS authentication dialog. Touch ID or your Mac login password ends blackout. Cancelling, failed authentication or switching to another app restores blackout. While the dialog is open, black windows cover the desktop and appear in agent captures. The menu, shortcut and ordinary Quit requests use the same authentication flow. System shutdown and logout proceed normally. If macOS cannot authenticate the account, the option cannot be enabled. If the account has no login password, an active blackout ends without authentication.
+Enable **Require Touch ID or password to end the blackout** to use the macOS authentication dialog. Touch ID or your Mac login password ends blackout. Cancelling, failed authentication or switching to another app restores blackout. While the dialog is open, black windows cover the desktop and appear in agent captures. The menu, shortcut and ordinary Quit requests use the same authentication flow. Turning the option off also requires authentication; other settings, such as Prevent Sleep, change without it. System shutdown and logout proceed normally. If macOS cannot authenticate the account, the option cannot be enabled. If the account has no login password, an active blackout ends without authentication.
 
 Turning on VoiceOver during blackout requests macOS login lock. Sleep, macOS lock and user switching suspend blackout and restore display output; blackout resumes on return. Force quitting can end blackout and leave brightness low; restore it with the brightness controls. This is a personal screen-hiding utility, not a replacement for macOS login lock.
 
@@ -65,7 +65,7 @@ Existing authentication preferences move to macOS account authentication. The re
 
 시스템 권한 허용 없이 사용하는 macOS 화면 가리기·잠자기 방지 앱입니다.
 
-**2.0.0 · 빌드 14 · macOS 13 이상 · 영어 / 한국어 · MIT**
+**2.0.1 · 빌드 15 · macOS 13 이상 · 영어 / 한국어 · MIT**
 
 ### 설치
 
@@ -98,7 +98,7 @@ open /Applications/agenticnights.app
 
 **클릭하면 화면 가리기를 해제합니다.** 마우스 이동·스크롤·키 입력으로는 해제하지 않습니다. 키 입력과 첫 클릭은 맨 앞 앱에 그대로 전달됩니다. 일반적인 에이전트 클릭은 무시하지만, 하드웨어 출처로 입력하는 에이전트는 사람 입력으로 판정될 수 있습니다.
 
-**화면 가리기 해제 시 Touch ID 또는 암호 요구**를 켜면 macOS 인증 창을 사용합니다. Touch ID 또는 Mac 로그인 암호로 해제합니다. 취소·실패하거나 다른 앱으로 전환하면 다시 화면을 가립니다. 인증 중에는 검은 창으로 바탕 화면을 덮으며, 에이전트 캡처에도 검은 창과 인증 창이 보입니다. 메뉴·단축키·일반 종료 요청도 같은 인증 절차를 거칩니다. 시스템 종료와 로그아웃은 그대로 진행합니다. macOS가 계정을 인증할 수 없으면 이 설정을 켤 수 없습니다. 계정에 로그인 암호가 없으면 진행 중인 화면 가리기는 인증 없이 해제합니다.
+**화면 가리기 해제 시 Touch ID 또는 암호 요구**를 켜면 macOS 인증 창을 사용합니다. Touch ID 또는 Mac 로그인 암호로 해제합니다. 취소·실패하거나 다른 앱으로 전환하면 다시 화면을 가립니다. 인증 중에는 검은 창으로 바탕 화면을 덮으며, 에이전트 캡처에도 검은 창과 인증 창이 보입니다. 메뉴·단축키·일반 종료 요청도 같은 인증 절차를 거칩니다. 이 설정을 끌 때도 인증이 필요하며, 잠자기 방지 같은 다른 설정은 인증 없이 바꿀 수 있습니다. 시스템 종료와 로그아웃은 그대로 진행합니다. macOS가 계정을 인증할 수 없으면 이 설정을 켤 수 없습니다. 계정에 로그인 암호가 없으면 진행 중인 화면 가리기는 인증 없이 해제합니다.
 
 화면을 가린 동안 VoiceOver를 켜면 macOS 화면 잠금을 요청합니다. Mac 잠자기·macOS 잠금·사용자 전환 중에는 화면 가리기를 일시 중지하고 색상과 밝기를 복원하며, 돌아오면 다시 가립니다. 강제 종료하면 가림이 풀리고 밝기는 낮게 남을 수 있으므로 밝기 조절로 되돌리세요. 개인용 화면 가리기 도구이며 macOS 로그인 잠금을 대신하지 않습니다.
 

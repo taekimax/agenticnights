@@ -1,6 +1,6 @@
 # Development
 
-Swift / AppKit, macOS 13+, no package dependencies. Version 2.0.0 (build 14). [User guide](README.md).
+Swift / AppKit, macOS 13+, no package dependencies. Version 2.0.1 (build 15). [User guide](README.md).
 
 ## Build and delivery
 
@@ -50,7 +50,7 @@ While blackout is active, enabling VoiceOver requests `SACLockScreenImmediate`. 
 
 Sleep prevention is independent of blackout and authentication. It owns one `caffeinate` process: `-di` with Keep Display On, otherwise `-i`, plus `-w <app-pid>` and optional `-t <remaining-seconds>`. Duration changes restart the deadline; input and relaunch do not. A display-option change preserves the deadline. Expiry disables prevention and returns control to macOS. No daily hours or persistent power-setting changes are used.
 
-Settings apply immediately. Minute fields commit on Return or focus departure; invalid values preserve the previous setting. A failed shortcut registration preserves the prior shortcut. During protected blackout, changing blackout/authentication controls first requests authenticated dismissal; independent sleep controls remain available.
+Settings apply immediately. Minute fields commit on Return or focus departure; invalid values preserve the previous setting. A failed shortcut registration preserves the prior shortcut. Turning Require Authentication off needs a separate `.deviceOwnerAuthentication` prompt; the checkbox keeps its value until that prompt succeeds. An account without a login password can turn it off directly. Every other setting, including sleep controls, changes without authentication. Enabling the option is refused when macOS cannot authenticate the account.
 
 ## Data and migration
 

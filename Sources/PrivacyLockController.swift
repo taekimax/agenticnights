@@ -57,7 +57,7 @@ final class PrivacyLockController {
             // An account without a login password can never authenticate, so
             // nothing could end blackout or quit the app. End it and report.
             // Other failures keep blackout; they are not a permanent condition.
-            if error?.domain == LAErrorDomain && error?.code == LAError.Code.passcodeNotSet.rawValue {
+            if Self.isPasscodeNotSet(error) {
                 shutdown()
                 onUnlock?()
             } else {
@@ -110,6 +110,11 @@ final class PrivacyLockController {
         var error: NSError?
         guard !context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else { return nil }
         return (error ?? LAError(.passcodeNotSet) as NSError).localizedDescription
+    }
+
+    /// An account without a login password can never pass account authentication.
+    static func isPasscodeNotSet(_ error: NSError?) -> Bool {
+        error?.domain == LAErrorDomain && error?.code == LAError.Code.passcodeNotSet.rawValue
     }
 
     /// Configuration changes invalidate the current system prompt. Reapply now
