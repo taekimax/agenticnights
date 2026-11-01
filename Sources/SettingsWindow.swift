@@ -1,381 +1,384 @@
 import AppKit
 
 extension IconAction {
-    var title: String { tr("feature.\(rawValue)") }
+    var title: String { tr("icon.\(rawValue)") }
 }
 
-final class SettingsWindow: NSWindowController, NSWindowDelegate {
-    private let enabledButton = NSButton(checkboxWithTitle: tr("settings.enableCover"), target: nil, action: nil)
+private final class SettingsDocumentView: NSView {
+    override var isFlipped: Bool { true }
+}
+
+final class SettingsWindow: NSWindowController, NSWindowDelegate, NSTextFieldDelegate {
+    enum Focus { case delay, duration }
+
+    private let enabledButton = NSButton(checkboxWithTitle: tr("blackout.auto"), target: nil, action: nil)
     private let intervalField = NSTextField(string: "10")
-    private let scheduleButton = NSButton(checkboxWithTitle: tr("settings.coverSchedule"), target: nil, action: nil)
-    private let mouseMoveButton = NSButton(checkboxWithTitle: tr("settings.dismissOnMouseMove"), target: nil, action: nil)
-    private let protectionButton = NSButton(checkboxWithTitle: tr("privacy.enable"), target: nil, action: nil)
-    private let passwordField = NSSecureTextField(string: "")
-    private let confirmationField = NSSecureTextField(string: "")
-    private let coverHint = NSTextField(wrappingLabelWithString: "")
-    private let idleHint = NSTextField(wrappingLabelWithString: "")
-    private let startPicker = NSDatePicker()
-    private let endPicker = NSDatePicker()
-    private let awakeEnabledButton = NSButton(checkboxWithTitle: tr("settings.enableAwake"), target: nil, action: nil)
-    private let awakeTimerButton = NSButton(checkboxWithTitle: tr("settings.stopAfter"), target: nil, action: nil)
+    private let protectionButton = NSButton(checkboxWithTitle: tr("blackout.requireAuth"), target: nil, action: nil)
+    private let awakeEnabledButton = NSButton(checkboxWithTitle: tr("sleep.enable"), target: nil, action: nil)
+    private let displayButton = NSButton(checkboxWithTitle: tr("sleep.display"), target: nil, action: nil)
+    private let durationPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let awakeDurationField = NSTextField(string: "60")
-    private let awakeScheduleButton = NSButton(checkboxWithTitle: tr("settings.awakeSchedule"), target: nil, action: nil)
-    private let awakeStartPicker = NSDatePicker()
-    private let awakeEndPicker = NSDatePicker()
+    private let durationEntry = NSStackView()
     private let shortcutButton = NSButton()
     private let iconActionPopup = NSPopUpButton(frame: .zero, pullsDown: false)
-    private var editedShortcut = KeyboardShortcut.defaults
-    private var keyMonitor: Any?
     private let statusLabel = NSTextField(wrappingLabelWithString: "")
-    private let errorLabel = NSTextField(wrappingLabelWithString: "")
-    private var baseline = VeilSettings.defaults
-    var onSave: ((VeilSettings, VeilSettings, String?) -> String?)?
+    private let delayError = NSTextField(wrappingLabelWithString: "")
+    private let durationError = NSTextField(wrappingLabelWithString: "")
+    private let shortcutError = NSTextField(wrappingLabelWithString: "")
+    private let changeError = NSTextField(wrappingLabelWithString: "")
+    private var settings = VeilSettings.defaults
+    private var dirtyMinutes: Set<Focus> = []
+    private var keyMonitor: Any?
+
+    /// Return an error without changing the saved settings when a proposal fails.
+    /// The owner may synchronously call updateStatus with its canonical settings.
+    var onChange: ((VeilSettings) -> String?)?
     var onRecordingChanged: ((Bool) -> Void)?
+    var onClose: (() -> Void)?
 
     init() {
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 820, height: 820),
-                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        let available = NSScreen.main?.visibleFrame.size ?? NSSize(width: 1024, height: 900)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0,
+                                                  width: min(640, available.width - 60),
+                                                  height: min(800, available.height - 100)),
+                              styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
         window.title = tr("settings.title")
         window.isReleasedWhenClosed = false
+        window.contentMinSize = NSSize(width: min(560, available.width - 60), height: 400)
         super.init(window: window)
         window.delegate = self
-        window.center()
         buildContent()
+        window.center()
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
-    func present(settings: VeilSettings, status: String) {
-        // Reopening an already-visible settings window must preserve unsaved edits.
+    func present(settings: VeilSettings, status: String, focus: Focus? = nil) {
         if window?.isVisible != true {
-            baseline = settings
-            iconActionPopup.selectItem(at: IconAction.allCases.firstIndex(of: settings.iconAction) ?? 2)
-            editedShortcut = settings.shortcut
-            updateShortcutTitle()
-            enabledButton.state = settings.enabled ? .on : .off
-            intervalField.stringValue = String(settings.intervalMinutes)
-            scheduleButton.state = settings.scheduleEnabled ? .on : .off
-            mouseMoveButton.state = settings.dismissOnMouseMove ? .on : .off
-            protectionButton.state = settings.passwordProtection ? .on : .off
-            passwordField.stringValue = ""
-            confirmationField.stringValue = ""
-            startPicker.dateValue = date(for: settings.startMinute)
-            endPicker.dateValue = date(for: settings.endMinute)
-            awakeEnabledButton.state = settings.awake.enabled ? .on : .off
-            awakeTimerButton.state = settings.awake.timerEnabled ? .on : .off
-            awakeDurationField.stringValue = String(settings.awake.durationMinutes)
-            awakeScheduleButton.state = settings.awake.scheduleEnabled ? .on : .off
-            awakeStartPicker.dateValue = date(for: settings.awake.startMinute)
-            awakeEndPicker.dateValue = date(for: settings.awake.endMinute)
-            errorLabel.stringValue = ""
-            updateScheduleControls()
+            dirtyMinutes.removeAll()
+            for label in [delayError, durationError, shortcutError, changeError] { setError("", on: label) }
         }
-        statusLabel.stringValue = status
+        updateStatus(status, settings: settings)
         showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
+        if let focus {
+            // Opening Custom… exposes the entry without changing the saved mode.
+            if focus == .duration { durationEntry.isHidden = false }
+            let field = focus == .delay ? intervalField : awakeDurationField
+            field.scrollToVisible(field.bounds.insetBy(dx: -8, dy: -12))
+            window?.makeFirstResponder(field)
+            field.selectText(nil)
+        }
     }
 
     func updateStatus(_ text: String, settings: VeilSettings) {
+        self.settings = settings
         statusLabel.stringValue = text
-        // Reflect timer expiry and icon clicks without overwriting unsaved edits.
-        if (enabledButton.state == .on) == baseline.enabled {
-            enabledButton.state = settings.enabled ? .on : .off
-            baseline.enabled = settings.enabled
-        }
-        if (awakeEnabledButton.state == .on) == baseline.awake.enabled {
-            awakeEnabledButton.state = settings.awake.enabled ? .on : .off
-            baseline.awake.enabled = settings.awake.enabled
-        }
-        if intervalField.stringValue == String(baseline.intervalMinutes), window?.firstResponder !== intervalField.currentEditor() {
+        refreshControls()
+    }
+
+    private func refreshControls() {
+        enabledButton.state = settings.enabled ? .on : .off
+        protectionButton.state = settings.requireAuthentication ? .on : .off
+        awakeEnabledButton.state = settings.awake.enabled ? .on : .off
+        displayButton.state = settings.awake.keepDisplayOn ? .on : .off
+        durationPopup.selectItem(at: settings.awake.timerEnabled ? 1 : 0)
+        iconActionPopup.selectItem(at: IconAction.allCases.firstIndex(of: settings.iconAction) ?? 1)
+        if !dirtyMinutes.contains(.delay), intervalField.currentEditor() == nil {
             intervalField.stringValue = String(settings.intervalMinutes)
-            baseline.intervalMinutes = settings.intervalMinutes
         }
-        if (mouseMoveButton.state == .on) == baseline.dismissOnMouseMove {
-            mouseMoveButton.state = settings.dismissOnMouseMove ? .on : .off
-            baseline.dismissOnMouseMove = settings.dismissOnMouseMove
-        }
-        if (awakeTimerButton.state == .on) == baseline.awake.timerEnabled {
-            awakeTimerButton.state = settings.awake.timerEnabled ? .on : .off
-            baseline.awake.timerEnabled = settings.awake.timerEnabled
-        }
-        if awakeDurationField.stringValue == String(baseline.awake.durationMinutes), window?.firstResponder !== awakeDurationField.currentEditor() {
+        if !dirtyMinutes.contains(.duration), awakeDurationField.currentEditor() == nil {
             awakeDurationField.stringValue = String(settings.awake.durationMinutes)
-            baseline.awake.durationMinutes = settings.awake.durationMinutes
         }
-        updateScheduleControls()
+        durationEntry.isHidden = !settings.awake.timerEnabled &&
+            !dirtyMinutes.contains(.duration) && awakeDurationField.currentEditor() == nil
+        if keyMonitor == nil { updateShortcutTitle() }
     }
 
     private func buildContent() {
         guard let content = window?.contentView else { return }
+        let scroll = NSScrollView()
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+        scroll.drawsBackground = false
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(scroll)
+        NSLayoutConstraint.activate([
+            scroll.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            scroll.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            scroll.topAnchor.constraint(equalTo: content.topAnchor),
+            scroll.bottomAnchor.constraint(equalTo: content.bottomAnchor)
+        ])
+        let document = SettingsDocumentView()
+        document.translatesAutoresizingMaskIntoConstraints = false
+        scroll.documentView = document
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 16
+        stack.spacing = 22
         stack.translatesAutoresizingMaskIntoConstraints = false
-        content.addSubview(stack)
+        document.addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 24),
-            stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -24),
-            stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 24)
+            document.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
+            stack.leadingAnchor.constraint(equalTo: document.leadingAnchor, constant: 24),
+            stack.trailingAnchor.constraint(equalTo: document.trailingAnchor, constant: -24),
+            stack.topAnchor.constraint(equalTo: document.topAnchor, constant: 20),
+            stack.bottomAnchor.constraint(equalTo: document.bottomAnchor, constant: -24)
         ])
-        statusLabel.textColor = .secondaryLabelColor
-        statusLabel.font = .systemFont(ofSize: 12)
-        stack.addArrangedSubview(statusLabel)
-        statusLabel.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
-        statusLabel.heightAnchor.constraint(equalToConstant: 36).isActive = true
-
-        for action in IconAction.allCases {
-            iconActionPopup.addItem(withTitle: action.title)
-            iconActionPopup.lastItem?.representedObject = action.rawValue
-        }
-        iconActionPopup.setAccessibilityLabel(tr("settings.iconAction"))
-        stack.addArrangedSubview(row([NSTextField(labelWithString: tr("settings.iconAction")),
-                                     iconActionPopup, hint(tr("icon.menuHint"))]))
-
         for field in [intervalField, awakeDurationField] {
             field.alignment = .right
-            field.widthAnchor.constraint(equalToConstant: 60).isActive = true
+            field.widthAnchor.constraint(equalToConstant: 64).isActive = true
+            field.delegate = self
+            field.target = self
+            field.action = #selector(minutesReturned(_:))
         }
-        intervalField.setAccessibilityLabel(tr("accessibility.idleDelay"))
-        awakeDurationField.setAccessibilityLabel(tr("accessibility.duration"))
-        for button in [scheduleButton, awakeScheduleButton, awakeTimerButton, protectionButton] {
+        intervalField.setAccessibilityLabel(tr("blackout.delay"))
+        awakeDurationField.setAccessibilityLabel(tr("sleep.duration"))
+        for button in [enabledButton, protectionButton, awakeEnabledButton, displayButton] {
             button.target = self
-            button.action = #selector(scheduleChanged)
+            button.action = #selector(toggleChanged(_:))
         }
-        for picker in [startPicker, endPicker, awakeStartPicker, awakeEndPicker] {
-            picker.datePickerStyle = .textFieldAndStepper
-            picker.datePickerElements = [.hourMinute]
-            picker.locale = .current
+        for label in [delayError, durationError, shortcutError, changeError] {
+            label.font = .systemFont(ofSize: 12)
+            label.textColor = .systemRed
+            label.isHidden = true
         }
-        startPicker.setAccessibilityLabel(tr("accessibility.coverStart"))
-        endPicker.setAccessibilityLabel(tr("accessibility.coverEnd"))
-        awakeStartPicker.setAccessibilityLabel(tr("accessibility.awakeStart"))
-        awakeEndPicker.setAccessibilityLabel(tr("accessibility.awakeEnd"))
-
-        stack.addArrangedSubview(row([NSTextField(labelWithString: tr("settings.idleDelay")),
-                                     intervalField, NSTextField(labelWithString: tr("settings.minutes"))]))
-        idleHint.font = .systemFont(ofSize: 12)
-        idleHint.textColor = .secondaryLabelColor
-        stack.addArrangedSubview(idleHint)
-        idleHint.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
-        coverHint.font = .systemFont(ofSize: 12)
-        coverHint.textColor = .secondaryLabelColor
-
-        let coverBox = section(tr("feature.cover"), views: [
-            enabledButton,
-            scheduleButton,
-            row([NSTextField(labelWithString: tr("settings.start")), startPicker]),
-            row([NSTextField(labelWithString: tr("settings.end")), endPicker]),
-            mouseMoveButton,
-            protectionButton,
-            coverHint
-        ])
-        let awakeBox = section(tr("feature.awake"), views: [
-            awakeEnabledButton,
-            row([awakeTimerButton, awakeDurationField, NSTextField(labelWithString: tr("settings.minutes"))]),
-            awakeScheduleButton,
-            row([NSTextField(labelWithString: tr("settings.start")), awakeStartPicker]),
-            row([NSTextField(labelWithString: tr("settings.end")), awakeEndPicker]),
-            hint(tr("settings.awakeIdleHint"))
-        ])
-        let columns = NSStackView(views: [coverBox, awakeBox])
-        columns.orientation = .horizontal
-        columns.alignment = .top
-        columns.distribution = .fillEqually
-        columns.spacing = 16
-        stack.addArrangedSubview(columns)
-        columns.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
-        coverBox.heightAnchor.constraint(equalTo: awakeBox.heightAnchor).isActive = true
-
-        for field in [passwordField, confirmationField] {
-            field.widthAnchor.constraint(equalToConstant: 260).isActive = true
-        }
-        passwordField.setAccessibilityLabel(tr("privacy.newPassword"))
-        confirmationField.setAccessibilityLabel(tr("privacy.confirmPassword"))
-        stack.addArrangedSubview(row([NSTextField(labelWithString: tr("privacy.newPassword")), passwordField,
-                                     NSTextField(labelWithString: tr("privacy.confirmPassword")), confirmationField]))
-        let protectionHint = hint(tr("privacy.settingsHint"))
-        stack.addArrangedSubview(protectionHint)
-        protectionHint.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
-
         shortcutButton.bezelStyle = .rounded
         shortcutButton.target = self
         shortcutButton.action = #selector(recordShortcut)
         shortcutButton.setAccessibilityLabel(tr("settings.shortcutRecord"))
         let reset = NSButton(title: tr("settings.shortcutReset"), target: self, action: #selector(resetShortcut))
         reset.bezelStyle = .rounded
-        stack.addArrangedSubview(row([NSTextField(labelWithString: tr("settings.shortcut")), shortcutButton, reset]))
-        stack.addArrangedSubview(hint(tr("settings.shortcutHint")))
-        stack.addArrangedSubview(hint(tr("settings.footer")))
-        errorLabel.textColor = .systemRed
-        errorLabel.font = .systemFont(ofSize: 12)
-        stack.addArrangedSubview(errorLabel)
-        errorLabel.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        durationPopup.addItems(withTitles: [tr("menu.noLimit"), tr("menu.custom")])
+        durationPopup.target = self
+        durationPopup.action = #selector(durationChanged)
+        durationPopup.setAccessibilityLabel(tr("sleep.duration"))
+        durationEntry.orientation = .horizontal
+        durationEntry.alignment = .centerY
+        durationEntry.spacing = 6
+        durationEntry.addArrangedSubview(awakeDurationField)
+        durationEntry.addArrangedSubview(minutesLabel())
+        for action in IconAction.allCases { iconActionPopup.addItem(withTitle: action.title) }
+        iconActionPopup.target = self
+        iconActionPopup.action = #selector(iconActionChanged)
+        iconActionPopup.setAccessibilityLabel(tr("icon.click"))
+        statusLabel.font = .systemFont(ofSize: 12)
+        statusLabel.textColor = .secondaryLabelColor
 
-        let cancel = NSButton(title: tr("settings.cancel"), target: self, action: #selector(cancelChanges))
-        cancel.keyEquivalent = "\u{1b}"
-        let save = NSButton(title: tr("settings.apply"), target: self, action: #selector(saveChanges))
-        save.bezelStyle = .rounded
-        cancel.bezelStyle = .rounded
-        save.keyEquivalent = "\r"
-        let buttons = row([cancel, save])
-        buttons.translatesAutoresizingMaskIntoConstraints = false
-        content.addSubview(buttons)
-        NSLayoutConstraint.activate([
-            buttons.topAnchor.constraint(greaterThanOrEqualTo: stack.bottomAnchor, constant: 8),
-            buttons.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -24),
-            buttons.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -20)
+        let blackout = section("blackout.title", views: [
+            hint("blackout.about"), enabledButton,
+            row([NSTextField(labelWithString: tr("blackout.delay")), intervalField, minutesLabel()]),
+            delayError, hint("blackout.delayHint"), hint("blackout.end"),
+            protectionButton, hint("blackout.requireAuthHint"),
+            row([NSTextField(labelWithString: tr("blackout.shortcut")), shortcutButton, reset]),
+            shortcutError, hint("blackout.shortcutHint"), hint("settings.shortcutHint"),
+            hint("blackout.voiceOver"), hint("blackout.dim")
         ])
+        let sleep = section("sleep.title", views: [
+            awakeEnabledButton, hint("sleep.enableHint"), displayButton, hint("sleep.displayHint"),
+            row([NSTextField(labelWithString: tr("sleep.duration")), durationPopup, durationEntry]),
+            durationError, hint("sleep.durationHint"),
+            row([NSTextField(labelWithString: tr("sleep.status")), statusLabel])
+        ])
+        let icon = section("icon.title", views: [
+            row([NSTextField(labelWithString: tr("icon.click")), iconActionPopup]), hint("icon.hint")
+        ])
+        for view in [blackout, sleep, icon, changeError] {
+            stack.addArrangedSubview(view)
+            view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        }
     }
 
-    private func hint(_ text: String) -> NSTextField {
-        let label = NSTextField(wrappingLabelWithString: text)
+    private func minutesLabel() -> NSTextField {
+        NSTextField(labelWithString: tr("menu.minutes", ["minutes": ""]).trimmingCharacters(in: .whitespaces))
+    }
+
+    private func hint(_ key: String) -> NSTextField {
+        let label = NSTextField(wrappingLabelWithString: tr(key))
         label.font = .systemFont(ofSize: 12)
         label.textColor = .secondaryLabelColor
         return label
     }
 
-    private func section(_ title: String, views: [NSView]) -> NSBox {
-        let box = NSBox()
-        box.title = title
-        box.contentViewMargins = NSSize(width: 14, height: 14)
-        let stack = NSStackView(views: views)
+    private func section(_ title: String, views: [NSView]) -> NSStackView {
+        let heading = NSTextField(labelWithString: tr(title))
+        heading.font = .boldSystemFont(ofSize: 13)
+        let stack = NSStackView(views: [heading] + views)
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 14
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        let content = box.contentView!
-        content.addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: content.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            stack.topAnchor.constraint(equalTo: content.topAnchor),
-            stack.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor)
-        ])
-        for view in views where view is NSTextField {
+        stack.spacing = 7
+        stack.setCustomSpacing(10, after: heading)
+        for view in views where view is NSTextField || view is NSStackView {
             view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }
-        return box
+        return stack
     }
 
     private func row(_ views: [NSView]) -> NSStackView {
         let stack = NSStackView(views: views)
         stack.orientation = .horizontal
         stack.alignment = .centerY
-        stack.spacing = 10
+        stack.spacing = 8
+        // Keep controls at their intrinsic size; unused width belongs at the end.
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        stack.addArrangedSubview(spacer)
         return stack
     }
 
-    @objc private func scheduleChanged() {
-        // Commit the field editor before disabling a control, so an entered
-        // duration or time is retained when its optional restriction is unchecked.
-        window?.makeFirstResponder(nil)
-        updateScheduleControls()
-    }
-    private func updateScheduleControls() {
-        startPicker.isEnabled = scheduleButton.state == .on
-        endPicker.isEnabled = scheduleButton.state == .on
-        awakeStartPicker.isEnabled = awakeScheduleButton.state == .on
-        awakeEndPicker.isEnabled = awakeScheduleButton.state == .on
-        awakeDurationField.isEnabled = awakeTimerButton.state == .on
-        mouseMoveButton.isEnabled = protectionButton.state != .on
-        coverHint.stringValue = tr(protectionButton.state == .on ? "privacy.coverHint" : "settings.coverHint")
-        idleHint.stringValue = tr("settings.idleHint")
+    private func setError(_ message: String, on label: NSTextField) {
+        label.stringValue = message
+        label.isHidden = message.isEmpty
     }
 
-    @objc private func saveChanges() {
-        stopRecording()
-        window?.makeFirstResponder(nil)
-        guard let interval = Int(intervalField.stringValue.trimmingCharacters(in: .whitespaces)),
-              (1...1440).contains(interval) else {
-            errorLabel.stringValue = tr("settings.invalidIdleDelay")
-            return
+    @discardableResult
+    private func apply(_ edit: (inout VeilSettings) -> Void, errorLabel: NSTextField? = nil) -> Bool {
+        let previous = settings
+        var proposal = previous
+        edit(&proposal)
+        let label = errorLabel ?? changeError
+        setError("", on: label)
+        guard proposal != previous else { return true }
+        settings = proposal
+        if let error = onChange?(proposal) {
+            settings = previous
+            setError(error, on: label)
+            refreshControls()
+            return false
         }
-        let duration = Int(awakeDurationField.stringValue.trimmingCharacters(in: .whitespaces))
-        if awakeTimerButton.state == .on && !(duration.map { (1...1440).contains($0) } ?? false) {
-            errorLabel.stringValue = tr("settings.invalidDuration")
-            return
-        }
-        var settings = baseline
-        if let value = iconActionPopup.selectedItem?.representedObject as? String,
-           let action = IconAction(rawValue: value) { settings.iconAction = action }
-        settings.shortcut = editedShortcut
-        settings.enabled = enabledButton.state == .on
-        settings.intervalMinutes = interval
-        settings.scheduleEnabled = scheduleButton.state == .on
-        settings.dismissOnMouseMove = mouseMoveButton.state == .on
-        settings.passwordProtection = protectionButton.state == .on
-        settings.startMinute = minutes(from: startPicker.dateValue)
-        settings.endMinute = minutes(from: endPicker.dateValue)
-        settings.awake.enabled = awakeEnabledButton.state == .on
-        settings.awake.timerEnabled = awakeTimerButton.state == .on
-        if let duration, (1...1440).contains(duration) { settings.awake.durationMinutes = duration }
-        settings.awake.scheduleEnabled = awakeScheduleButton.state == .on
-        settings.awake.startMinute = minutes(from: awakeStartPicker.dateValue)
-        settings.awake.endMinute = minutes(from: awakeEndPicker.dateValue)
-        let password = passwordField.stringValue
-        guard password == confirmationField.stringValue else {
-            errorLabel.stringValue = tr("privacy.passwordMismatch")
-            return
-        }
-        if !password.isEmpty, UnlockPassword.validationError(password) != nil {
-            errorLabel.stringValue = tr("privacy.passwordRules")
-            return
-        }
-        if let error = onSave?(settings, baseline, password.isEmpty ? nil : password) {
-            errorLabel.stringValue = error
-            return
-        }
-        close()
+        refreshControls()
+        return true
     }
 
-    @objc private func cancelChanges() { close() }
+    @objc private func toggleChanged(_ sender: NSButton) {
+        let enabled = sender.state == .on
+        apply { settings in
+            if sender === enabledButton { settings.enabled = enabled }
+            else if sender === protectionButton { settings.requireAuthentication = enabled }
+            else if sender === awakeEnabledButton {
+                settings.awake.enabled = enabled
+                settings.awake.expiresAt = nil
+            } else if sender === displayButton { settings.awake.keepDisplayOn = enabled }
+        }
+    }
+
+    @objc private func durationChanged() {
+        let limited = durationPopup.indexOfSelectedItem == 1
+        if !limited {
+            dirtyMinutes.remove(.duration)
+            setError("", on: durationError)
+            awakeDurationField.stringValue = String(settings.awake.durationMinutes)
+        }
+        apply {
+            if $0.awake.timerEnabled != limited { $0.awake.expiresAt = nil }
+            $0.awake.timerEnabled = limited
+        }
+        if limited {
+            durationEntry.isHidden = false
+            window?.makeFirstResponder(awakeDurationField)
+            awakeDurationField.selectText(nil)
+        }
+    }
+
+    @objc private func iconActionChanged() {
+        let index = iconActionPopup.indexOfSelectedItem
+        guard IconAction.allCases.indices.contains(index) else { return }
+        apply { $0.iconAction = IconAction.allCases[index] }
+    }
+
+    func controlTextDidChange(_ notification: Notification) {
+        guard let field = notification.object as? NSTextField else { return }
+        dirtyMinutes.insert(field === intervalField ? .delay : .duration)
+    }
+
+    func controlTextDidEndEditing(_ notification: Notification) {
+        guard let field = notification.object as? NSTextField else { return }
+        commitMinutes(field)
+    }
+
+    @objc private func minutesReturned(_ sender: NSTextField) {
+        // Custom… may focus the retained duration while No Limit is selected.
+        // Return explicitly accepts that value, even without typing a new one.
+        dirtyMinutes.insert(sender === intervalField ? .delay : .duration)
+        commitMinutes(sender)
+    }
+
+    private func commitMinutes(_ field: NSTextField) {
+        let focus: Focus = field === intervalField ? .delay : .duration
+        guard dirtyMinutes.contains(focus) else { return }
+        let label = focus == .delay ? delayError : durationError
+        let input = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !input.isEmpty, input.allSatisfy({ $0.isASCII && $0.isNumber }),
+              let minutes = Int(input), (1...1440).contains(minutes) else {
+            setError(tr("error.minutes"), on: label)
+            return
+        }
+        let accepted = apply({ settings in
+            if focus == .delay { settings.intervalMinutes = minutes }
+            else {
+                if !settings.awake.timerEnabled || settings.awake.durationMinutes != minutes {
+                    settings.awake.expiresAt = nil
+                }
+                settings.awake.durationMinutes = minutes
+                settings.awake.timerEnabled = true
+            }
+        }, errorLabel: label)
+        if accepted {
+            dirtyMinutes.remove(focus)
+            field.stringValue = String(minutes)
+            refreshControls()
+        }
+    }
 
     override func close() {
+        window?.makeFirstResponder(nil)
         stopRecording()
-        passwordField.stringValue = ""
-        confirmationField.stringValue = ""
         super.close()
+    }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        sender.makeFirstResponder(nil)
+        return true
     }
 
     func windowWillClose(_ notification: Notification) {
         stopRecording()
-        passwordField.stringValue = ""
-        confirmationField.stringValue = ""
+        onClose?()
     }
+
     func windowDidResignKey(_ notification: Notification) { stopRecording() }
 
     private func updateShortcutTitle() {
-        shortcutButton.title = "\(editedShortcut.displayName)  \(tr("settings.shortcutRecord"))"
+        shortcutButton.title = "\(settings.shortcut.displayName)  \(tr("settings.shortcutRecord"))"
     }
 
     @objc private func resetShortcut() {
         stopRecording()
-        editedShortcut = .defaults
-        updateShortcutTitle()
-        errorLabel.stringValue = ""
+        apply({ $0.shortcut = .defaults }, errorLabel: shortcutError)
     }
 
     @objc private func recordShortcut() {
         if keyMonitor != nil { stopRecording(); return }
         window?.makeFirstResponder(shortcutButton)
-        errorLabel.stringValue = ""
+        setError("", on: shortcutError)
         shortcutButton.title = tr("settings.shortcutRecording")
-        onRecordingChanged?(true)
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, self.window?.isKeyWindow == true else { return event }
             if event.keyCode == 53 { self.stopRecording(); return nil }
             let proposed = KeyboardShortcut(event: event)
             guard proposed.isValid else {
-                self.errorLabel.stringValue = tr("settings.shortcutInvalid")
+                self.setError(tr("settings.shortcutInvalid"), on: self.shortcutError)
                 return nil
             }
-            self.editedShortcut = proposed
-            self.errorLabel.stringValue = ""
+            // Restore the existing registration before attempting replacement;
+            // a rejected proposal must leave that valid shortcut registered.
             self.stopRecording()
+            self.apply({ $0.shortcut = proposed }, errorLabel: self.shortcutError)
             return nil
         }
+        if keyMonitor != nil { onRecordingChanged?(true) }
+        else { updateShortcutTitle() }
     }
 
     private func stopRecording() {
@@ -384,13 +387,5 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
         self.keyMonitor = nil
         updateShortcutTitle()
         onRecordingChanged?(false)
-    }
-    private func date(for minute: Int) -> Date {
-        Calendar.current.date(bySettingHour: minute / 60, minute: minute % 60,
-                              second: 0, of: Date()) ?? Date()
-    }
-    private func minutes(from date: Date) -> Int {
-        let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
-        return (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
     }
 }

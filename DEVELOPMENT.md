@@ -1,73 +1,75 @@
 # Development
 
-Swift / AppKit, macOS 13+, no package dependencies. [User guide](README.md).
+Swift / AppKit, macOS 13+, no package dependencies. Version 2.0.0 (build 14). [User guide](README.md).
 
 ## Build and delivery
 
 | Command | Purpose |
 | --- | --- |
 | `./Scripts/build.sh` | Build and ad-hoc sign `.build/agenticnights.app`; two compiler threads |
-| `./Scripts/install.sh` | Quit the installed app, retain it in Trash, install and compare all payloads |
+| `./Scripts/install.sh` | Quit the installed app, retain it in Trash, install and compare payloads |
 | `open /Applications/agenticnights.app` | Launch the installed app |
-| `./Scripts/test.sh` | Existing schedule, localization and memory password checks |
-| `./Scripts/test-interactions.sh` | Carbon shortcut registration checks |
-| `./Scripts/test-privacy-live.sh` | Opt-in gamma/input experiment; temporarily blocks desk input |
+| `./Scripts/test.sh` | Schedule/settings migration, localization, simulated brightness and click classification checks |
+| `./Scripts/test-interactions.sh` | Carbon shortcut registration and offscreen English/Korean Settings behavior/layout checks |
+| `./Scripts/test-privacy-live.sh [output-directory]` | Opt-in real gamma/backlight lifecycle checks |
+| `./Scripts/test-privacy-live.sh [output-directory] --authentication` | Open real macOS authentication; requires a human to authenticate or cancel |
 
-Keep generated output in `.build/`. Preserve user settings, translations and useful evidence. Use SSH for authenticated Git operations. The installed app root must remain owner-writable; do not change payload permissions recursively.
+Keep generated output in `.build/`. Preserve settings, translations and useful evidence. Use SSH for authenticated Git operations. The installed app root must remain owner-writable; do not change payload permissions recursively. Build, signing, installation, launch and live behavior require separate evidence. See the [current delivery record](docs/no-permission-delivery-2026-11-02.md) for PASS, FAIL and NOT RUN results; commands listed here are instructions, not a claim they were run.
 
-The build packages `Resources/Brand/agenticnights-moon-transparent-v1.png` into `AppIcon.icns` with `Scripts/build-icon.sh`. The source artwork, generation prompt and pixel-cleanup script remain in `Resources/Brand/`. The menu-bar moon is unchanged.
+The build packages `Resources/Brand/agenticnights-moon-transparent-v1.png` into `AppIcon.icns` with `Scripts/build-icon.sh`. Source artwork and generation/cleanup records remain in `Resources/Brand/`.
 
 ## Ownership
 
+All files below are under `Sources/`.
+
 | File | Responsibility |
 | --- | --- |
-| `DisplayBlackout.swift` | Read full gamma ramps, blacken connected displays, restore originals |
-| `PhysicalInputFilter.swift` | HID event tap on a dedicated run loop; discard desk input, allow other sources |
-| `PrivacyLockController.swift` | Shared blackout lifecycle, optional authentication, prompt animation and retry limits |
-| `UnlockPassword.swift` | Keychain verifier, PBKDF2-SHA256 and constant-time comparison |
-| `UserActivity.swift` | HID idle duration, capped after wake/session return |
-| `Schedule.swift` | Blackout delay, independent daily hours, persisted awake timer |
-| `SleepPrevention.swift` | Own `caffeinate -di -w <app-pid>` and release it on stop |
-| `main.swift` | Menus, settings, system notifications, one-second updates and status |
-| `Localization.swift` | Bundled text and user translation overrides |
-
-The old `CoverController` and menu-bar hiding preference are removed. Gamma is the only blackout mechanism. Opaque windows exist only while displaying the password prompt.
+| `DisplayBlackout.swift` | Save full gamma ramps, blacken connected displays, restore originals |
+| `DisplayBrightness.swift` | Optional DisplayServices loading, supported-display brightness capture/dimming/restoration; injectable test backend |
+| `PhysicalClickMonitor.swift` | Global and local AppKit mouse-down monitors; source-state 1 classification; pass events through |
+| `PrivacyLockController.swift` | Blackout lifecycle, system authentication, temporary black backdrops, VoiceOver observation and macOS lock request |
+| `UserActivity.swift` | Physical-input idle duration, capped after wake/session return |
+| `Schedule.swift` | Settings decoding/migration, inactivity deadline and independent sleep-prevention deadline |
+| `SleepPrevention.swift` | Own `caffeinate -di` or `-i`, bounded by parent PID and optional remaining duration |
+| `Shortcut.swift` | Shortcut representation, validation and display |
+| `GlobalShortcut.swift` | Carbon shortcut registration and replacement |
+| `SettingsWindow.swift` | Three-section settings window; immediate valid edits and minute-field validation |
+| `main.swift` | Menu, icon actions, system notifications, one-shot deadlines, settings persistence and changed-state status output |
+| `LegacyPasswordCleanup.swift` | One-time removal of the retired credential through the system utility |
+| `Localization.swift` | Bundled English/Korean, language selection, validated user overrides and old-default recognition |
 
 ## Behavior
 
-Blackout waits for physical inactivity. It is suppressed while Settings or a menu is open. Both automatic and manual blackout use the same controller. The event tap consumes the physical key/click that dismisses ordinary mode; modifier changes also request dismissal, and mouse movement dismissal is optional. While ordinary blackout is active, a 100 ms HID keyboard-counter check provides a fallback for keys the tap misses. That fallback detects activity without reading characters but cannot consume an event the tap did not receive. It resets after session suspension and is disabled for password protection. Normal session/private-source synthetic input and app activation leave blackout in place.
+Gamma is the normal blackout mechanism. Global and local mouse monitors run only during active blackout and observe left/right/other button presses. Both monitors are intentional: global monitoring covers other apps, while local monitoring covers this app. Events pass through unchanged. Hardware source-state 1 requests dismissal; normal session/private-source automation does not. Movement, scrolling and keyboard events are not monitored for dismissal. The first click and all keyboard input reach the front app.
 
-Sleep prevention starts immediately when enabled within its scheduled hours. Input, menus and Settings do not stop it. Its optional deadline starts at activation and survives restart; expiry disables the feature. Password protection overrides its hours and timer until authenticated unlock. Manual macOS lock, sleep and inactive sessions release interception so login input remains usable.
+Automatic blackout uses HID idle time and a one-shot timer for the remaining quiet interval. Input before the deadline causes recalculation when it fires. Wake, session return, settings changes and menu closure recalculate the wait. Settings and open menus suppress automatic blackout. No one-second polling loop remains. Display configuration changes reapply gamma and brightness immediately, then after 5 and 10 seconds; pending callbacks are cancelled during suspension or authentication.
 
-Three wrong passwords cause a 60-second wait. Each subsequent failure doubles the wait to 120, 240 and 480 seconds. The seventh failure requires macOS login lock. Attempts during a wait are ignored. Escape and prompt timeout retain failure state; only successful app authentication or, after escalation, an observed macOS lock/unlock transition resets it. Failure to invoke macOS lock leaves input blocked and permits another lock request.
+`LocalAuthentication` uses `.deviceOwnerAuthentication`, allowing Touch ID or the Mac login password. Non-key, mouse-transparent black windows are installed before restoring gamma/backlight for the system dialog. Success ends blackout. Cancellation, failure, switching to another app or display reconfiguration invalidates the context and reapplies blackout. Apple system authentication agents are allowed to take focus. The previously active app is restored afterward. Dialog ordering and focus behavior still require real-device checks.
 
-The prompt appears above the desktop before gamma is restored. Closing it reapplies gamma blackout before removing the windows. A 30 Hz timer, active only while the prompt is visible, moves one text group per display using phase-modulated sine waves. Smooth interpolation cycles a four-color metallic palette. There is no physics engine, shader or external asset.
+While blackout is active, enabling VoiceOver requests `SACLockScreenImmediate`. Sleep, login lock and inactive sessions suspend blackout, restore display output and preserve intent for return. Ordinary Quit, Cmd-Q and SIGTERM require authentication when protected blackout is active; system shutdown/logout may proceed. Force termination remains outside this lifecycle.
 
-The password uses a random 32-byte salt and PBKDF2-HMAC-SHA256 with 210,000 iterations. Keychain holds the verifier, not plaintext. Unlock reads cannot open an authorization dialog behind blackout. No default password is created. A shortcut conflict cannot partially commit a new password.
+Sleep prevention is independent of blackout and authentication. It owns one `caffeinate` process: `-di` with Keep Display On, otherwise `-i`, plus `-w <app-pid>` and optional `-t <remaining-seconds>`. Duration changes restart the deadline; input and relaunch do not. A display-option change preserves the deadline. Expiry disables prevention and returns control to macOS. No daily hours or persistent power-setting changes are used.
 
-## Data
+Settings apply immediately. Minute fields commit on Return or focus departure; invalid values preserve the previous setting. A failed shortcut registration preserves the prior shortcut. During protected blackout, changing blackout/authentication controls first requests authenticated dismissal; independent sleep controls remain available.
 
-- Settings: JSON data under `settings` in UserDefaults domain `com.tk.agenticnights`.
-- Keychain: service `com.tk.agenticnights.unlock`, account `privacy-cover-password`.
+## Data and migration
+
+- Settings: JSON under `settings` in UserDefaults domain `com.tk.agenticnights`.
 - Translations: `~/Library/Application Support/agenticnights/Translations/`.
-- Status: `~/Library/Application Support/agenticnights/status.json`; inspect `running`, PID and `bundlePath` before using it.
+- Status: `~/Library/Application Support/agenticnights/status.json`; check `running`, PID and `bundlePath` before relying on it.
 
-Status records state, permission availability and the owned caffeinate PID; it contains no password, keystrokes or screenshots. English defines translation keys and placeholders. Recognized previously exported defaults use current bundled wording without rewriting custom files.
+Old `passwordProtection` becomes `requireAuthentication`. `LegacyPasswordCleanup` removes the retired `com.tk.agenticnights.unlock` / `privacy-cover-password` entry through `/usr/bin/security`; `legacyPasswordRemoved` is recorded only after removal or confirmation that the item is absent. The app stores no new authentication secret. Old sleep settings default Keep Display On to true. Icon values `both`/`cover` become `blackOut`, and `awake` becomes `toggleSleep`. Obsolete schedules and movement-dismissal fields are discarded on encoding.
+
+English defines translation keys and tokens. Both active catalogs contain the plan wording plus existing Edit-menu and shortcut-editor strings. Invalid overrides fall back to the selected bundled language, then English. `legacy-v1.2.json` through `legacy-v1.5.json` recognize previously exported defaults without rewriting user files. Historical catalogs intentionally retain retired wording as migration data; they are not exported as selectable languages.
+
+Status records blackout/authentication state, settings, localization warnings and the owned caffeinate PID. It does not record credentials, keystrokes or screenshots. Identical status payloads are not rewritten.
 
 ## References and verification
 
-[Curtain](https://github.com/acamarata/curtain/tree/0b2295fc15f5a0e3f2ad8ffd36684f8d7c4809a8) informs gamma blackout, physical-source filtering and the non-key password prompt. [RustDesk](https://github.com/rustdesk/rustdesk/blob/3b7e2cebd9303a43eecb9bc96921548df846f45d/src/platform/macos.mm) informs the earlier HID interception point. Original ramps are preserved instead of resetting the ColorSync profile. No password-free emergency uncover is provided.
+[Curtain](https://github.com/acamarata/curtain/tree/0b2295fc15f5a0e3f2ad8ffd36684f8d7c4809a8) informs gamma blackout, event-source classification, temporary non-key backdrops and macOS lock requests. [RustDesk](https://github.com/rustdesk/rustdesk/blob/3b7e2cebd9303a43eecb9bc96921548df846f45d/src/platform/macos.mm) informs display-reconfiguration-triggered gamma refresh. Original gamma ramps are preserved. No RustDesk code is incorporated.
 
-[KeepingYouAwake](https://github.com/newmarcel/KeepingYouAwake/blob/2be93dd7f390b23fbca934ff3b1ac03468a80077/Packages/KYASleepWakeTimer/Sources/KYASleepWakeTimer/KYASleepWakeTimer.m) informs the caffeinate process lifetime. Immediate activation closes the previous gap before the blackout delay. No simulated input, periodic user-activity declaration or persistent power-setting change is added. Screen-saver and automatic-login-lock suppression beyond `-di` remains unverified.
+[KeepingYouAwake](https://github.com/newmarcel/KeepingYouAwake/blob/2be93dd7f390b23fbca934ff3b1ac03468a80077/Packages/KYASleepWakeTimer/Sources/KYASleepWakeTimer/KYASleepWakeTimer.m) informs the parent-bounded caffeinate process and finite-duration timeout.
 
-[Implementation record](docs/privacy-protection-2026-10-31.md) distinguishes earlier physical checks from current build and delivery checks. Per the 2026-11-01 request, this revision adds no separate tests and does not rerun behavior experiments. Earlier checks do not validate the new backoff or animation. Real Keychain, third-party agents, HDR/EDR workflows and failure-triggered macOS login lock remain separate checks. DisplayLink is unsupported.
+The [2.0 delivery record](docs/no-permission-delivery-2026-11-02.md) owns current evidence and pending checks. Pure click classification and injected brightness tests cannot establish physical click delivery, panel appearance or brightness restoration on hardware. The opt-in live harness reads real gamma ramps and can request system authentication; it does not establish every human scenario. Touch ID and password separately, cancellation/Cmd-Tab, VoiceOver lock, protected quit paths, monitor hot-plug, real brightness restoration, agent capture/input compatibility, both UI languages and power comparisons require individually recorded results. DisplayLink is unsupported. `Experiments/PrivacyProbe` remains historical evidence rather than a current product path.
 
 Distribute [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) with the app.
-
-## Keyboard dismissal delivery — 2026-11-01
-
-Version 1.5.2 (build 13) adds modifier-event dismissal and a content-free HID keyboard-counter fallback for ordinary blackout. `Scripts/test.sh` passed keyboard activity, schedule, localization and in-memory password checks. The versioned build and staged/installed signature and full payload comparison passed. Physical keyboard confirmation is NOT RUN.
-
-Installed and launched `/Applications/agenticnights.app`; app-owned sleep prevention is active and existing settings are preserved. The new process reports `accessibilityGranted: false`, so screen blackout awaits the user's re-registration of the installed app in System Settings → Privacy & Security → Accessibility. Launch success does not establish keyboard dismissal in use.
-
-Prior installation: `~/.Trash/agenticnights-20261101-152322-188220.app`. Generated icon intermediates and the empty task caffeinate log were moved to `~/.Trash/agenticnights-keyboard-cleanup-20261101-152327`; build caches and earlier verification evidence remain.

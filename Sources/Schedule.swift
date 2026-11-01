@@ -1,31 +1,11 @@
 import Foundation
 
-/// Daily local-time range, inclusive at the start and exclusive at the end.
-/// Equal endpoints mean all day, including across daylight-saving changes.
-private func withinDailySchedule(
-    at date: Date,
-    enabled: Bool,
-    startMinute: Int,
-    endMinute: Int,
-    calendar: Calendar
-) -> Bool {
-    guard enabled, startMinute != endMinute else { return true }
-    let components = calendar.dateComponents([.hour, .minute], from: date)
-    guard let hour = components.hour, let minute = components.minute else { return false }
-    let minuteOfDay = hour * 60 + minute
-    if startMinute < endMinute {
-        return minuteOfDay >= startMinute && minuteOfDay < endMinute
-    }
-    return minuteOfDay >= startMinute || minuteOfDay < endMinute
-}
-
+/// Sleep prevention has one optional elapsed-time deadline, independent of blackout.
 struct AwakeSettings: Codable, Equatable, Sendable {
     var enabled = true
+    var keepDisplayOn = true
     var timerEnabled = false
     var durationMinutes = 60
-    var scheduleEnabled = false
-    var startMinute = 22 * 60
-    var endMinute = 7 * 60
     var expiresAt: Date?
 
     static let defaults = AwakeSettings()
@@ -33,34 +13,17 @@ struct AwakeSettings: Codable, Equatable, Sendable {
     func validated() -> AwakeSettings {
         var result = self
         result.durationMinutes = min(max(durationMinutes, 1), 1_440)
-        result.startMinute = min(max(startMinute, 0), 1_439)
-        result.endMinute = min(max(endMinute, 0), 1_439)
         return result
     }
 
-    func isWithinSchedule(at date: Date, calendar: Calendar = .current) -> Bool {
-        let settings = validated()
-        return withinDailySchedule(
-            at: date,
-            enabled: settings.scheduleEnabled,
-            startMinute: settings.startMinute,
-            endMinute: settings.endMinute,
-            calendar: calendar
-        )
-    }
-
-    /// A timer without a deadline is pending its first activation.
-    /// Use `update` to start or expire it and persist any changed settings.
+    /// A timer without a deadline starts on the next update.
     func isActive(at date: Date, calendar: Calendar = .current) -> Bool {
-        guard enabled, isWithinSchedule(at: date, calendar: calendar) else { return false }
-        if timerEnabled, let expiresAt, date >= expiresAt { return false }
-        return true
+        enabled && (!timerEnabled || expiresAt.map { date < $0 } != false)
     }
 
-    /// The finite timer measures elapsed time, including hours outside the daily
-    /// range. It starts only on the first actual activation and never renews on
-    /// tick, wake, or relaunch. User input does not stop the assertion.
-    /// The app persists the resulting deadline/state.
+    /// Starts once and expires once. Input, wake, and relaunch do not renew it.
+    /// Persist changes after calling this method. Duration edits explicitly clear
+    /// the old deadline before updating, so the new duration starts at the edit.
     mutating func update(at date: Date, calendar: Calendar = .current) -> Bool {
         self = validated()
         guard enabled else {
@@ -69,14 +32,13 @@ struct AwakeSettings: Codable, Equatable, Sendable {
         }
         guard timerEnabled else {
             expiresAt = nil
-            return isWithinSchedule(at: date, calendar: calendar)
+            return true
         }
         if let expiresAt, date >= expiresAt {
             enabled = false
             self.expiresAt = nil
             return false
         }
-        guard isWithinSchedule(at: date, calendar: calendar) else { return false }
         if expiresAt == nil {
             expiresAt = date.addingTimeInterval(TimeInterval(durationMinutes * 60))
         }
@@ -86,109 +48,77 @@ struct AwakeSettings: Codable, Equatable, Sendable {
 
 extension AwakeSettings {
     private enum CodingKeys: String, CodingKey {
-        case enabled, timerEnabled, durationMinutes, scheduleEnabled, startMinute, endMinute, expiresAt
+        case enabled, keepDisplayOn, timerEnabled, durationMinutes, expiresAt
     }
 
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
             enabled: try values.decodeIfPresent(Bool.self, forKey: .enabled) ?? Self.defaults.enabled,
-            timerEnabled: try values.decodeIfPresent(Bool.self, forKey: .timerEnabled) ?? Self.defaults.timerEnabled,
-            durationMinutes: try values.decodeIfPresent(Int.self, forKey: .durationMinutes) ?? Self.defaults.durationMinutes,
-            scheduleEnabled: try values.decodeIfPresent(Bool.self, forKey: .scheduleEnabled) ?? Self.defaults.scheduleEnabled,
-            startMinute: try values.decodeIfPresent(Int.self, forKey: .startMinute) ?? Self.defaults.startMinute,
-            endMinute: try values.decodeIfPresent(Int.self, forKey: .endMinute) ?? Self.defaults.endMinute,
+            keepDisplayOn: try values.decodeIfPresent(Bool.self, forKey: .keepDisplayOn) ?? true,
+            timerEnabled: try values.decodeIfPresent(Bool.self, forKey: .timerEnabled) ?? false,
+            durationMinutes: try values.decodeIfPresent(Int.self, forKey: .durationMinutes) ?? 60,
             expiresAt: try values.decodeIfPresent(Date.self, forKey: .expiresAt)
         )
     }
 }
 
 enum IconAction: String, Codable, CaseIterable, Sendable {
-    case cover, awake, both
+    case openMenu, blackOut, toggleSleep
+
+    init(from decoder: Decoder) throws {
+        let value = try decoder.singleValueContainer().decode(String.self)
+        switch value {
+        case "openMenu": self = .openMenu
+        case "awake", "toggleSleep": self = .toggleSleep
+        default: self = .blackOut
+        }
+    }
 }
 
 struct VeilSettings: Codable, Equatable, Sendable {
     var enabled = true
     var intervalMinutes = 10
-    var scheduleEnabled = false
-    var startMinute = 22 * 60
-    var endMinute = 7 * 60
     var awake = AwakeSettings.defaults
-    var iconAction = IconAction.both
-    var dismissOnMouseMove = true
-    var passwordProtection = false
+    var iconAction = IconAction.blackOut
+    var requireAuthentication = false
     var shortcut = KeyboardShortcut.defaults
 
     static let defaults = VeilSettings()
 
-    var iconFeaturesEnabled: Bool {
-        switch iconAction {
-        case .cover: return enabled
-        case .awake: return awake.enabled
-        case .both: return enabled || awake.enabled
-        }
-    }
-
-    mutating func toggleIconFeatures() {
-        let turnOn = !iconFeaturesEnabled
-        if iconAction != .awake { enabled = turnOn }
-        if iconAction != .cover { awake.enabled = turnOn }
-    }
-
     func validated() -> VeilSettings {
         var result = self
         result.intervalMinutes = min(max(intervalMinutes, 1), 1_440)
-        result.startMinute = min(max(startMinute, 0), 1_439)
-        result.endMinute = min(max(endMinute, 0), 1_439)
         result.awake = awake.validated()
         if !shortcut.isValid { result.shortcut = .defaults }
         return result
     }
 
-    func isActive(at date: Date, calendar: Calendar = .current) -> Bool {
-        let settings = validated()
-        guard settings.enabled else { return false }
-        return withinDailySchedule(
-            at: date,
-            enabled: settings.scheduleEnabled,
-            startMinute: settings.startMinute,
-            endMinute: settings.endMinute,
-            calendar: calendar
-        )
-    }
+    func isActive(at date: Date, calendar: Calendar = .current) -> Bool { enabled }
 }
 
 extension VeilSettings {
     private enum CodingKeys: String, CodingKey {
-        case enabled, intervalMinutes, scheduleEnabled, startMinute, endMinute, awake, iconAction, dismissOnMouseMove, passwordProtection, shortcut
+        case enabled, intervalMinutes, awake, iconAction, requireAuthentication, shortcut
     }
+    private enum LegacyKeys: String, CodingKey { case passwordProtection }
 
-    /// Preserve saved settings when a newer version adds an optional preference.
+    /// Read obsolete fields once; only current preferences are written back.
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
+        let legacy = try decoder.container(keyedBy: LegacyKeys.self)
         self.init(
-            enabled: try values.decodeIfPresent(Bool.self, forKey: .enabled) ?? Self.defaults.enabled,
-            intervalMinutes: try values.decodeIfPresent(Int.self, forKey: .intervalMinutes) ?? Self.defaults.intervalMinutes,
-            scheduleEnabled: try values.decodeIfPresent(Bool.self, forKey: .scheduleEnabled) ?? Self.defaults.scheduleEnabled,
-            startMinute: try values.decodeIfPresent(Int.self, forKey: .startMinute) ?? Self.defaults.startMinute,
-            endMinute: try values.decodeIfPresent(Int.self, forKey: .endMinute) ?? Self.defaults.endMinute
+            enabled: try values.decodeIfPresent(Bool.self, forKey: .enabled) ?? true,
+            intervalMinutes: try values.decodeIfPresent(Int.self, forKey: .intervalMinutes) ?? 10
         )
-        dismissOnMouseMove = try values.decodeIfPresent(Bool.self, forKey: .dismissOnMouseMove) ?? true
-        passwordProtection = try values.decodeIfPresent(Bool.self, forKey: .passwordProtection) ?? false
-        iconAction = try values.decodeIfPresent(IconAction.self, forKey: .iconAction) ?? .both
+        requireAuthentication = try values.decodeIfPresent(Bool.self, forKey: .requireAuthentication)
+            ?? legacy.decodeIfPresent(Bool.self, forKey: .passwordProtection) ?? false
+        iconAction = try values.decodeIfPresent(IconAction.self, forKey: .iconAction) ?? .blackOut
         shortcut = (try? values.decode(KeyboardShortcut.self, forKey: .shortcut)) ?? .defaults
-        if let savedAwake = try values.decodeIfPresent(AwakeSettings.self, forKey: .awake) {
-            awake = savedAwake
-        } else {
-            // Older releases tied sleep prevention to the cover toggle/hours.
-            // Copy that behavior once; later updates remain independent.
-            awake = AwakeSettings(
-                enabled: enabled,
-                scheduleEnabled: scheduleEnabled,
-                startMinute: startMinute,
-                endMinute: endMinute
-            )
-        }
+        // Very old releases tied sleep prevention to the blackout switch.
+        // Preserve that switch once while discarding obsolete daily hours.
+        awake = try values.decodeIfPresent(AwakeSettings.self, forKey: .awake)
+            ?? AwakeSettings(enabled: enabled)
     }
 }
 

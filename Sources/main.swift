@@ -4,27 +4,32 @@ import OSLog
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let log = Logger(subsystem: "com.tk.agenticnights", category: "App")
     private let privacy = PrivacyLockController()
-    private let unlockPassword = UnlockPassword()
+    private let legacyCleanup = LegacyPasswordCleanup()
     private let sleepPrevention = SleepPrevention()
     private var schedule = VeilSchedule()
     private var userActivity = UserActivity()
-    private var idleReady = false
     private var settings = VeilSettings.defaults
     private var statusItem: NSStatusItem!
-    private var timer: Timer?
+    private var idleTimer: Timer?
+    private var awakeTimer: Timer?
     private var terminationSignal: DispatchSourceSignal?
     private var shortcut: GlobalShortcut?
     private var settingsWindow: SettingsWindow?
     private var observers: [NSObjectProtocol] = []
     private var sessionActive = true
     private var sleeping = false
+    private var displaySleeping = false
     private var menuIsOpen = false
     private var screenLocked = false
     private var systemTerminating = false
+    private var quitAfterUnlock = false
+    private var terminating = false
     private var privacyError: String?
+    private var dismissalMouseNumber: Int64?
     private var lastStatusData: Data?
     private let statusURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/agenticnights/status.json")
+    private var sessionAvailable: Bool { sessionActive && !sleeping && !displaySleeping && !screenLocked }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         signal(SIGTERM, SIG_IGN)
@@ -36,51 +41,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
            let loaded = try? JSONDecoder().decode(VeilSettings.self, from: data) {
             settings = loaded.validated()
         }
-        privacy.dismissOnMouseMove = settings.dismissOnMouseMove
         persistSettings()
+        legacyCleanup.run()
         installMainMenu()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem.autosaveName = "ScreenProtection"
         statusItem.button?.target = self
         statusItem.button?.action = #selector(iconClicked(_:))
         statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        privacy.onPhysicalClick = { [weak self] event in
+            guard let self, !self.privacy.isLocked, event.type == .leftMouseDown else { return }
+            self.dismissalMouseNumber = event.cgEvent?.getIntegerValueField(.mouseEventNumber)
+        }
         privacy.onChange = { [weak self] in self?.refreshStatus() }
         privacy.onError = { [weak self] error in
             self?.privacyError = error
-            self?.log.error("Privacy protection: \(error, privacy: .public)")
+            self?.log.error("Blackout: \(error, privacy: .public)")
             self?.refreshStatus()
         }
+        privacy.onAuthenticationCancelled = { [weak self] in self?.quitAfterUnlock = false }
         privacy.onUnlock = { [weak self] in
-            guard let self else { return }
-            self.schedule.didCover(at: Date(), settings: self.settings)
+            guard let self, !self.terminating else { return }
             self.userActivity.reset()
+            self.schedule.reset()
             self.privacyError = nil
-            self.tick()
+            if self.quitAfterUnlock { self.quitAfterUnlock = false; NSApp.terminate(nil) }
+            else { self.updateState() }
         }
         shortcut = GlobalShortcut(shortcut: settings.shortcut) { [weak self] in self?.toggleCover() }
         observeSystem()
-        tick()
-        timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in self?.tick() }
-        RunLoop.main.add(timer!, forMode: .common)
-        log.info("Started. Interval: \(self.settings.intervalMinutes) minutes.")
+        updateState()
         if firstLaunch { showSettings() }
     }
 
     @objc private func iconClicked(_ button: NSStatusBarButton) {
-        guard !privacy.isLocked else { privacy.requestUnlock(); return }
         let event = NSApp.currentEvent
+        let dismissedByThisClick = isPhysicalClick(sourceStateID: event?.cgEvent?.getIntegerValueField(.eventSourceStateID)) &&
+            dismissalMouseNumber != nil &&
+            dismissalMouseNumber == event?.cgEvent?.getIntegerValueField(.mouseEventNumber)
+        dismissalMouseNumber = nil
         let opensMenu = event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true ||
-            event?.modifierFlags.contains(.option) == true
-        guard opensMenu else {
-            var updated = settings
-            updated.toggleIconFeatures()
-            applySettings(updated)
-            return
+            event?.modifierFlags.contains(.option) == true || settings.iconAction == .openMenu
+        if opensMenu {
+            let menu = NSMenu()
+            menu.autoenablesItems = false
+            menu.delegate = self
+            menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.minY - 4), in: button)
+        } else {
+            switch settings.iconAction {
+            case .openMenu: break
+            case .blackOut: if !privacy.isCovered && !dismissedByThisClick { showCover() }
+            case .toggleSleep: toggleAwakeEnabled()
+            }
         }
-        let menu = NSMenu()
-        menu.autoenablesItems = false
-        menu.delegate = self
-        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.minY - 4), in: button)
     }
 
     private func installMainMenu() {
@@ -105,50 +118,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func observeSystem() {
         let workspace = NSWorkspace.shared.notificationCenter
-        for name in [NSWorkspace.willSleepNotification, NSWorkspace.screensDidSleepNotification] {
+        func observe(_ name: Notification.Name, _ body: @escaping (AppDelegate) -> Void) {
             observers.append(workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                self?.sleeping = true
-                self?.suspend()
+                guard let self else { return }; body(self)
             })
         }
-        for name in [NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification] {
-            observers.append(workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                self?.sleeping = false
-                self?.schedule.reset()
-                self?.userActivity.reset()
-                self?.tick()
-            })
-        }
-        observers.append(workspace.addObserver(forName: NSWorkspace.sessionDidResignActiveNotification,
-            object: nil, queue: .main) { [weak self] _ in self?.sessionActive = false; self?.suspend() })
-        observers.append(workspace.addObserver(forName: NSWorkspace.sessionDidBecomeActiveNotification,
-            object: nil, queue: .main) { [weak self] _ in
-                self?.sessionActive = true; self?.schedule.reset(); self?.userActivity.reset(); self?.tick()
-            })
+        observe(NSWorkspace.willSleepNotification) { $0.sleeping = true; $0.suspend() }
+        observe(NSWorkspace.screensDidSleepNotification) { $0.displaySleeping = true; $0.suspend() }
+        observe(NSWorkspace.didWakeNotification) { $0.sleeping = false; $0.returnToSession() }
+        observe(NSWorkspace.screensDidWakeNotification) { $0.displaySleeping = false; $0.returnToSession() }
+        observe(NSWorkspace.sessionDidResignActiveNotification) { $0.sessionActive = false; $0.suspend() }
+        observe(NSWorkspace.sessionDidBecomeActiveNotification) { $0.sessionActive = true; $0.returnToSession() }
+        observe(NSWorkspace.willPowerOffNotification) { $0.systemTerminating = true }
         observers.append(NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
                 self?.privacy.refreshScreens()
             })
-        observers.append(workspace.addObserver(forName: NSWorkspace.willPowerOffNotification,
-            object: nil, queue: .main) { [weak self] _ in self?.systemTerminating = true })
         let distributed = DistributedNotificationCenter.default()
         observers.append(distributed.addObserver(forName: NSNotification.Name("com.apple.screenIsLocked"),
             object: nil, queue: .main) { [weak self] _ in self?.screenLocked = true; self?.suspend() })
         observers.append(distributed.addObserver(forName: NSNotification.Name("com.apple.screenIsUnlocked"),
-            object: nil, queue: .main) { [weak self] _ in
-                guard let self else { return }
-                if self.screenLocked { self.privacy.systemDidUnlock() }
-                self.screenLocked = false; self.userActivity.reset(); self.tick()
-            })
+            object: nil, queue: .main) { [weak self] _ in self?.screenLocked = false; self?.returnToSession() })
+        observers.append(NotificationCenter.default.addObserver(forName: NSNotification.Name.NSSystemClockDidChange,
+            object: nil, queue: .main) { [weak self] _ in self?.updateState() })
     }
 
     private func suspend() {
-        if privacy.isLocked { privacy.suspend() }
-        else { privacy.shutdown() }
+        idleTimer?.invalidate(); idleTimer = nil
+        privacy.suspend()
         schedule.reset()
-        idleReady = false
-        sleepPrevention.stop()
+        // Sleep prevention and its deadline are independent of blackout/session state.
+        updateAwake(now: Date())
         refreshStatus()
+    }
+
+    private func returnToSession() {
+        schedule.reset()
+        userActivity.reset()
+        if sessionAvailable { privacy.resume() }
+        updateState()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -156,287 +164,201 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return true
     }
 
-    private func tick() {
-        guard sessionActive, !sleeping, !screenLocked else { return }
-        if privacy.isLocked {
-            privacy.resume()
-            privacy.tick()
-            sleepPrevention.start()
-            refreshStatus()
-            return
-        }
+    private func updateState() {
+        guard !terminating else { return }
+        idleTimer?.invalidate(); idleTimer = nil
         let now = Date()
-        let idleSeconds = userActivity.idleSeconds()
-        idleReady = isIdleReady(idleSeconds, settings: settings) &&
-            settingsWindow?.window?.isVisible != true && !menuIsOpen
-        let wasActive = schedule.active
-        let due = schedule.tick(now: now, settings: settings, idleSeconds: idleSeconds)
-        if wasActive && !schedule.active { privacy.shutdown() }
         updateAwake(now: now)
-        if privacy.isCovered { privacy.tick() }
-        if due && idleReady && !privacy.isCovered { showCover() }
+        if sessionAvailable && settings.enabled && !privacy.isCovered && !menuIsOpen && settingsWindow?.window?.isVisible != true {
+            if schedule.tick(now: now, settings: settings, idleSeconds: userActivity.idleSeconds()) { showCover() }
+            if !privacy.isCovered, let next = schedule.nextCover {
+                let delay = max(0.1, next.timeIntervalSinceNow)
+                let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in self?.updateState() }
+                timer.tolerance = min(5, delay * 0.1)
+                idleTimer = timer
+                RunLoop.main.add(timer, forMode: .common)
+            }
+        }
         refreshStatus()
     }
 
     private func updateAwake(now: Date) {
+        awakeTimer?.invalidate(); awakeTimer = nil
         let previous = settings.awake
         let active = settings.awake.update(at: now)
         if settings.awake != previous { persistSettings() }
-        if sessionActive && !sleeping && active { sleepPrevention.start() }
+        if active { sleepPrevention.start(settings: settings.awake, now: now) }
         else { sleepPrevention.stop() }
+        if let deadline = settings.awake.expiresAt {
+            let delay = max(0.01, deadline.timeIntervalSince(now))
+            let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in self?.updateState() }
+            timer.tolerance = min(1, delay * 0.1)
+            awakeTimer = timer
+            RunLoop.main.add(timer, forMode: .common)
+        }
     }
 
     private var coverStatusText: String {
-        if privacy.isLocked { return tr("privacy.locked") }
-        if let privacyError { return tr("status.error", ["error": privacyError]) }
-        if privacy.isCovered { return tr("status.covered") }
-        if !settings.enabled { return tr("status.off") }
-        if !AXIsProcessTrusted() { return tr("privacy.permissionNeeded") }
-        if !sessionActive || sleeping { return tr("status.paused") }
-        if !schedule.active { return tr("status.outsideSchedule") }
-        if let next = schedule.nextCover {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "HH:mm:ss"
-            return tr("status.nextCover", ["time": formatter.string(from: next)])
-        }
-        return tr("status.on")
+        if let privacyError { return tr("error.blackout", ["error": privacyError]) }
+        return tr(privacy.isCovered ? "status.blackedOut" : (settings.enabled ? "menu.autoBlackout" : "status.off"))
     }
 
     private var awakeStatusText: String {
-        if privacy.isLocked && sessionActive && !sleeping && !screenLocked {
-            if let error = sleepPrevention.lastError { return tr("status.error", ["error": error]) }
-            return tr("privacy.awake")
-        }
         if !settings.awake.enabled { return tr("status.off") }
-        if !sessionActive || sleeping { return tr("status.paused") }
-        if !settings.awake.isWithinSchedule(at: Date()) { return tr("status.outsideSchedule") }
-        if let error = sleepPrevention.lastError { return tr("status.error", ["error": error]) }
+        if let error = sleepPrevention.lastError { return error }
         if let deadline = settings.awake.expiresAt {
             let formatter = DateFormatter()
-            formatter.dateFormat = "HH:mm:ss"
-            return tr("status.stopsAt", ["time": formatter.string(from: deadline)])
+            formatter.locale = Locale(identifier: Localization.shared.language)
+            formatter.timeStyle = .short
+            formatter.dateStyle = .none
+            let key = Calendar.current.isDateInTomorrow(deadline) ? "status.onUntilTomorrow" : "status.onUntil"
+            return tr(key, ["time": formatter.string(from: deadline)])
         }
-        return sleepPrevention.isRunning ? tr("status.on") : tr("status.waiting")
-    }
-
-    private var statusText: String {
-        tr("status.summary", ["cover": coverStatusText, "awake": awakeStatusText])
+        return tr("status.onNoLimit")
     }
 
     private func refreshStatus() {
         guard let button = statusItem?.button else { return }
-        let enabled = settings.iconFeaturesEnabled
-        button.image = NSImage(systemSymbolName: enabled ? "moon.fill" : "moon",
-                               accessibilityDescription: "agenticnights")
+        let enabled = settings.enabled || settings.awake.enabled || privacy.isCovered
+        button.image = NSImage(systemSymbolName: enabled ? "moon.fill" : "moon", accessibilityDescription: "agenticnights")
         button.image?.isTemplate = true
         button.appearsDisabled = !enabled
-        let action = tr("icon.action", ["features": settings.iconAction.title])
-        button.toolTip = tr("status.tooltip", ["status": statusText]) + "\n" + action + " · " + tr("icon.menuHint")
-        button.setAccessibilityLabel("agenticnights · " + action)
-        settingsWindow?.updateStatus(statusText, settings: settings)
+        button.toolTip = coverStatusText + "\n" + tr("sleep.title") + ": " + awakeStatusText + "\n" + tr("icon.hint")
+        button.setAccessibilityLabel("agenticnights")
+        settingsWindow?.updateStatus(awakeStatusText, settings: settings)
         writeStatus()
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        if privacy.isLocked {
-            let item = menu.addItem(withTitle: tr("privacy.unlock"), action: #selector(hideCover), keyEquivalent: "")
+        @discardableResult func add(_ key: String, _ action: Selector?, checked: Bool? = nil) -> NSMenuItem {
+            let item = menu.addItem(withTitle: tr(key), action: action, keyEquivalent: "")
             item.target = self
-            return
+            if let checked { item.state = checked ? .on : .off }
+            return item
         }
-        for title in [tr("status.coverHeading", ["status": coverStatusText]),
-                      tr("status.awakeHeading", ["status": awakeStatusText])] {
-            let heading = menu.addItem(withTitle: title, action: nil, keyEquivalent: "")
-            heading.isEnabled = false
-        }
+        let blackoutKey = privacy.isCovered ? (settings.requireAuthentication ? "menu.endBlackoutAuth" : "menu.endBlackout") : "menu.blackOut"
+        add(blackoutKey, #selector(toggleCover))
         menu.addItem(.separator())
-        let enable = menu.addItem(withTitle: tr("settings.enableCover"), action: #selector(toggleEnabled), keyEquivalent: "")
-        enable.target = self
-        enable.state = settings.enabled ? .on : .off
-        let awake = menu.addItem(withTitle: tr("settings.enableAwake"), action: #selector(toggleAwakeEnabled), keyEquivalent: "")
-        awake.target = self
-        awake.state = settings.awake.enabled ? .on : .off
-        let interval = menu.addItem(withTitle: tr("menu.idleDelay", ["minutes": String(settings.intervalMinutes)]), action: nil, keyEquivalent: "")
-        let intervals = NSMenu()
-        intervals.autoenablesItems = false
+        add("menu.autoBlackout", #selector(toggleEnabled), checked: settings.enabled)
+        let interval = add("menu.autoDelay", nil)
+        interval.title = tr("menu.autoDelay", ["minutes": String(settings.intervalMinutes)])
+        let intervals = NSMenu(); intervals.autoenablesItems = false
         for minutes in [5, 10, 15, 30, 60] {
             let item = intervals.addItem(withTitle: tr("menu.minutes", ["minutes": String(minutes)]), action: #selector(setInterval(_:)), keyEquivalent: "")
-            item.target = self
-            item.tag = minutes
+            item.target = self; item.tag = minutes
             item.state = settings.intervalMinutes == minutes ? .on : .off
         }
-        intervals.addItem(.separator())
-        let custom = intervals.addItem(withTitle: tr("menu.customIdleDelay"), action: #selector(showSettings), keyEquivalent: "")
-        custom.target = self
+        let customDelay = intervals.addItem(withTitle: tr("menu.custom"), action: #selector(showDelaySettings), keyEquivalent: "")
+        customDelay.target = self
         interval.submenu = intervals
-        let movement = menu.addItem(withTitle: tr("menu.dismissOnMouseMove"), action: #selector(toggleMouseMove), keyEquivalent: "")
-        movement.target = self
-        movement.state = settings.dismissOnMouseMove ? .on : .off
-        let timerItem = menu.addItem(withTitle: tr("menu.awakeTimer"), action: nil, keyEquivalent: "")
-        let timers = NSMenu()
-        timers.autoenablesItems = false
+        menu.addItem(.separator())
+        add("menu.preventSleep", #selector(toggleAwakeEnabled), checked: settings.awake.enabled)
+        let status = menu.addItem(withTitle: awakeStatusText, action: nil, keyEquivalent: "")
+        status.isEnabled = false
+        let duration = add("menu.duration", nil)
+        let durations = NSMenu(); durations.autoenablesItems = false
         for minutes in [0, 30, 60, 120] {
-            let item = timers.addItem(withTitle: minutes == 0 ? tr("menu.noTimer") : tr("menu.timerMinutes", ["minutes": String(minutes)]), action: #selector(setAwakeTimer(_:)), keyEquivalent: "")
-            item.target = self
-            item.tag = minutes
+            let title = minutes == 0 ? tr("menu.noLimit") : tr("menu.minutes", ["minutes": String(minutes)])
+            let item = durations.addItem(withTitle: title, action: #selector(setAwakeTimer(_:)), keyEquivalent: "")
+            item.target = self; item.tag = minutes
             item.state = (minutes == 0 ? !settings.awake.timerEnabled : settings.awake.timerEnabled && settings.awake.durationMinutes == minutes) ? .on : .off
         }
-        timerItem.submenu = timers
+        let customDuration = durations.addItem(withTitle: tr("menu.custom"), action: #selector(showDurationSettings), keyEquivalent: "")
+        customDuration.target = self
+        duration.submenu = durations
+        add("menu.keepDisplayOn", #selector(toggleDisplay), checked: settings.awake.keepDisplayOn)
         menu.addItem(.separator())
-        let now = menu.addItem(withTitle: tr(privacy.isCovered ? "menu.uncover" : "menu.cover"), action: #selector(toggleCover), keyEquivalent: "")
-        now.target = self
-        let shortcutItem = menu.addItem(withTitle: tr("menu.shortcut", ["shortcut": settings.shortcut.displayName]), action: #selector(showSettings), keyEquivalent: "")
-        shortcutItem.target = self
-        if shortcut?.registrationStatus != noErr {
-            let warning = menu.addItem(withTitle: tr("menu.shortcutUnavailable"), action: nil, keyEquivalent: "")
-            warning.isEnabled = false
-        }
-        menu.addItem(.separator())
-        let preferences = menu.addItem(withTitle: tr("menu.settings"), action: #selector(showSettings), keyEquivalent: ",")
-        preferences.target = self
-        menu.addItem(.separator())
-        menu.addItem(withTitle: tr("menu.quit"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let preferences = add("menu.settings", #selector(showSettings)); preferences.keyEquivalent = ","
+        let quit = add("menu.quit", #selector(NSApplication.terminate(_:))); quit.target = NSApp; quit.keyEquivalent = "q"
     }
 
-    func menuWillOpen(_ menu: NSMenu) { menuIsOpen = true }
-    func menuDidClose(_ menu: NSMenu) { menuIsOpen = false }
+    func menuWillOpen(_ menu: NSMenu) { menuIsOpen = true; idleTimer?.invalidate(); idleTimer = nil }
+    func menuDidClose(_ menu: NSMenu) { menuIsOpen = false; updateState() }
 
     @objc private func setInterval(_ sender: NSMenuItem) {
-        var updated = settings
-        updated.intervalMinutes = sender.tag
-        applySettings(updated)
+        var updated = settings; updated.intervalMinutes = sender.tag; _ = applySettings(updated)
     }
-
     @objc private func setAwakeTimer(_ sender: NSMenuItem) {
-        var updated = settings
-        updated.awake.timerEnabled = sender.tag != 0
+        var updated = settings; updated.awake.timerEnabled = sender.tag != 0
         if sender.tag > 0 { updated.awake.durationMinutes = sender.tag }
-        applySettings(updated)
+        _ = applySettings(updated)
     }
-
-    @objc private func toggleMouseMove() {
-        var updated = settings
-        updated.dismissOnMouseMove.toggle()
-        applySettings(updated)
+    @objc private func toggleDisplay() {
+        var updated = settings; updated.awake.keepDisplayOn.toggle(); _ = applySettings(updated)
     }
-
     @objc private func toggleEnabled() {
-        var updated = settings
-        updated.enabled.toggle()
-        applySettings(updated)
+        var updated = settings; updated.enabled.toggle(); _ = applySettings(updated)
     }
-
     @objc private func toggleAwakeEnabled() {
-        var updated = settings
-        updated.awake.enabled.toggle()
-        applySettings(updated)
+        var updated = settings; updated.awake.enabled.toggle(); _ = applySettings(updated)
     }
 
     @objc private func showCover() {
+        guard sessionAvailable, !privacy.isCovered else { return }
         settingsWindow?.close()
+        idleTimer?.invalidate(); idleTimer = nil
         do {
-            try privacy.start(requirePassword: settings.passwordProtection)
-            if privacy.isLocked { sleepPrevention.start() }
+            try privacy.start(requireAuthentication: settings.requireAuthentication)
             privacyError = nil
         } catch {
-            privacyError = AXIsProcessTrusted() ? tr("privacy.startFailed") : tr("privacy.accessibility")
+            privacyError = error.localizedDescription
             log.error("Could not start blackout: \(error.localizedDescription, privacy: .public)")
-            showSettings()
-            return
         }
         schedule.didCover(at: Date(), settings: settings)
         refreshStatus()
-        log.info("Gamma blackout started.")
-    }
-
-    @objc private func hideCover() {
-        privacy.requestUnlock()
     }
 
     @objc private func toggleCover() {
-        if privacy.isCovered { hideCover() }
+        if privacy.isCovered { privacy.requestUnlock() }
         else { showCover() }
     }
 
-    @objc private func showSettings() {
+    @objc private func showSettings() { presentSettings() }
+    @objc private func showDelaySettings() { presentSettings(focus: .delay) }
+    @objc private func showDurationSettings() { presentSettings(focus: .duration) }
+    private func presentSettings(focus: SettingsWindow.Focus? = nil) {
         guard !privacy.isLocked else { privacy.requestUnlock(); return }
         privacy.shutdown()
+        idleTimer?.invalidate(); idleTimer = nil
         if settingsWindow == nil {
             settingsWindow = SettingsWindow()
-            settingsWindow?.onSave = { [weak self] edited, baseline, password in
-                self?.applySettingsEdits(edited, baseline: baseline, password: password)
-            }
+            settingsWindow?.onChange = { [weak self] settings in self?.applySettings(settings) }
             settingsWindow?.onRecordingChanged = { [weak self] recording in
                 guard let self else { return }
                 if recording { self.shortcut?.suspend() }
                 else { self.shortcut?.resume(self.settings.shortcut); self.refreshStatus() }
             }
-        }
-        settingsWindow?.present(settings: settings, status: statusText)
-    }
-
-    private func applySettingsEdits(_ edited: VeilSettings, baseline: VeilSettings, password: String?) -> String? {
-        guard !privacy.isLocked else { privacy.requestUnlock(); return tr("privacy.locked") }
-        // Keep live menu changes and timer expiry when their controls were not edited.
-        var result = settings
-        func merge<Value: Equatable>(_ key: WritableKeyPath<VeilSettings, Value>) {
-            if edited[keyPath: key] != baseline[keyPath: key] {
-                result[keyPath: key] = edited[keyPath: key]
+            settingsWindow?.onClose = { [weak self] in
+                DispatchQueue.main.async { self?.updateState() }
             }
         }
-        merge(\.enabled)
-        merge(\.intervalMinutes)
-        merge(\.scheduleEnabled)
-        merge(\.startMinute)
-        merge(\.endMinute)
-        merge(\.dismissOnMouseMove)
-        merge(\.passwordProtection)
-        merge(\.shortcut)
-        merge(\.iconAction)
-        merge(\.awake.enabled)
-        merge(\.awake.timerEnabled)
-        merge(\.awake.durationMinutes)
-        merge(\.awake.scheduleEnabled)
-        merge(\.awake.startMinute)
-        merge(\.awake.endMinute)
-        do {
-            if result.passwordProtection, password == nil, try !unlockPassword.hasPassword() {
-                return tr("privacy.noPassword")
-            }
-        } catch { return tr("privacy.passwordUnavailable") }
-        let replaceShortcut = result.shortcut != settings.shortcut || shortcut?.registrationStatus != noErr
-        if replaceShortcut {
-            guard shortcut?.replace(with: result.shortcut) == noErr else { return tr("settings.shortcutConflict") }
-        }
-        do {
-            if let password { try unlockPassword.setPassword(password) }
-        } catch {
-            if replaceShortcut { _ = shortcut?.replace(with: settings.shortcut) }
-            return tr("privacy.passwordUnavailable")
-        }
-        applySettings(result)
-        return nil
+        settingsWindow?.present(settings: settings, status: awakeStatusText, focus: focus)
+        refreshStatus()
     }
 
-    private func applySettings(_ newSettings: VeilSettings) {
-        guard !privacy.isLocked else { privacy.requestUnlock(); return }
+    private func applySettings(_ newSettings: VeilSettings) -> String? {
+        // Sleep settings remain independently usable during blackout. Changing
+        // authentication/blackout behavior requires ending protected blackout.
+        if privacy.isLocked && (newSettings.requireAuthentication != settings.requireAuthentication ||
+            newSettings.enabled != settings.enabled || newSettings.intervalMinutes != settings.intervalMinutes ||
+            newSettings.shortcut != settings.shortcut || newSettings.iconAction != settings.iconAction) {
+            privacy.requestUnlock()
+            return tr("status.blackedOut")
+        }
         let old = settings
-        settings = newSettings.validated()
-        // A cover-only change, or a change to the awake hours, keeps the timer deadline.
-        let restartTimer = old.awake.enabled != settings.awake.enabled ||
-            old.awake.timerEnabled != settings.awake.timerEnabled ||
-            old.awake.durationMinutes != settings.awake.durationMinutes
-        settings.awake.expiresAt = restartTimer ? nil : old.awake.expiresAt
-        privacy.dismissOnMouseMove = settings.dismissOnMouseMove
-        if !settings.isActive(at: Date()) { privacy.shutdown() }
-        if old.enabled != settings.enabled || old.intervalMinutes != settings.intervalMinutes ||
-            old.scheduleEnabled != settings.scheduleEnabled || old.startMinute != settings.startMinute ||
-            old.endMinute != settings.endMinute {
-            schedule.reset()
+        let candidate = newSettings.validated()
+        if candidate.shortcut != old.shortcut || shortcut?.registrationStatus != noErr {
+            guard shortcut?.replace(with: candidate.shortcut) == noErr else { return tr("error.shortcut") }
         }
+        settings = candidate
+        let restartTimer = old.awake.enabled != settings.awake.enabled ||
+            old.awake.timerEnabled != settings.awake.timerEnabled || old.awake.durationMinutes != settings.awake.durationMinutes
+        settings.awake.expiresAt = restartTimer ? nil : old.awake.expiresAt
+        if old.enabled != settings.enabled || old.intervalMinutes != settings.intervalMinutes { schedule.reset() }
         persistSettings()
-        tick()
-        log.info("Settings saved. Cover: \(self.settings.enabled), awake: \(self.settings.awake.enabled).")
+        updateState()
+        return nil
     }
 
     private func persistSettings() {
@@ -450,32 +372,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             "translationDirectory": Localization.shared.directory.path,
             "localizationWarnings": Localization.shared.warnings,
             "bundlePath": Bundle.main.bundlePath, "enabled": settings.enabled,
-            "dismissOnMouseMove": settings.dismissOnMouseMove,
-            "passwordProtection": settings.passwordProtection,
-            "accessibilityGranted": AXIsProcessTrusted(),
-            "privacyLocked": privacy.isLocked, "physicalInputBlocked": privacy.isInputBlocked,
-            "passwordPromptVisible": privacy.isShowingPrompt,
-            "iconAction": settings.iconAction.rawValue, "iconFeaturesEnabled": settings.iconFeaturesEnabled,
+            "requireAuthentication": settings.requireAuthentication,
+            "covered": privacy.isCovered, "authenticationVisible": privacy.isAuthenticating,
+            "iconAction": settings.iconAction.rawValue,
             "shortcut": settings.shortcut.displayName,
             "shortcutKeyCode": settings.shortcut.keyCode, "shortcutModifiers": settings.shortcut.modifiers,
-            "intervalMinutes": settings.intervalMinutes, "scheduleEnabled": settings.scheduleEnabled,
-            "startMinute": settings.startMinute, "endMinute": settings.endMinute,
-            "scheduleActive": schedule.active, "covered": privacy.isCovered,
+            "intervalMinutes": settings.intervalMinutes,
             "awakeAssertion": sleepPrevention.isRunning,
-            "idleReady": idleReady,
-            "awakeEnabled": settings.awake.enabled, "awakeTimerEnabled": settings.awake.timerEnabled,
-            "awakeDurationMinutes": settings.awake.durationMinutes,
-            "awakeScheduleEnabled": settings.awake.scheduleEnabled,
-            "awakeStartMinute": settings.awake.startMinute, "awakeEndMinute": settings.awake.endMinute,
-            "awakeScheduleActive": settings.awake.isActive(at: Date()),
+            "awakeEnabled": settings.awake.enabled, "keepDisplayOn": settings.awake.keepDisplayOn,
+            "awakeTimerEnabled": settings.awake.timerEnabled, "awakeDurationMinutes": settings.awake.durationMinutes,
             "coverStatus": coverStatusText, "awakeStatus": awakeStatusText,
             "shortcutStatus": shortcut?.registrationStatus ?? -1,
-            "status": statusText
+            "sessionAvailable": sessionAvailable
         ]
-        if let next = schedule.nextCover { state["nextCover"] = ISO8601DateFormatter().string(from: next) }
-        if let deadline = settings.awake.expiresAt {
-            state["awakeExpiresAt"] = ISO8601DateFormatter().string(from: deadline)
-        }
+        if let next = schedule.nextCover, idleTimer != nil { state["nextCover"] = ISO8601DateFormatter().string(from: next) }
+        if let deadline = settings.awake.expiresAt { state["awakeExpiresAt"] = ISO8601DateFormatter().string(from: deadline) }
         if let pid = sleepPrevention.processIdentifier { state["caffeinatePID"] = pid }
         guard let data = try? JSONSerialization.data(withJSONObject: state, options: [.prettyPrinted, .sortedKeys]),
               data != lastStatusData else { return }
@@ -487,18 +398,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        timer?.invalidate()
+        terminating = true
+        idleTimer?.invalidate(); awakeTimer?.invalidate()
         terminationSignal?.cancel()
         privacy.shutdown()
         sleepPrevention.stop()
         schedule.reset()
         shortcut = nil
         writeStatus(running: false)
-        log.info("Stopped.")
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard privacy.isLocked, !systemTerminating else { return .terminateNow }
+        quitAfterUnlock = true
         privacy.requestUnlock()
         return .terminateCancel
     }

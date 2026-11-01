@@ -1,16 +1,15 @@
 #!/bin/zsh
-# Explicitly opt-in: briefly blanks physical displays and blocks physical input.
+# Explicitly opt-in: briefly blacks out and dims physical displays.
 set -euo pipefail
 project_root="${0:A:h:h}"
 mkdir -p "$project_root/.build/tests" "$project_root/.build/ModuleCache"
 xcrun swiftc -swift-version 5 -num-threads 2 \
   -module-cache-path "$project_root/.build/ModuleCache" \
-  "$project_root/Sources/DisplayBlackout.swift" "$project_root/Sources/PhysicalInputFilter.swift" \
-  "$project_root/Sources/KeyboardActivity.swift" \
-  "$project_root/Sources/UnlockPassword.swift" "$project_root/Sources/PrivacyLockController.swift" \
-  "$project_root/Sources/Shortcut.swift" "$project_root/Sources/GlobalShortcut.swift" "$project_root/Sources/Schedule.swift" \
-  "$project_root/Sources/SettingsWindow.swift" \
+  "$project_root/Sources/DisplayBlackout.swift" "$project_root/Sources/DisplayBrightness.swift" \
+  "$project_root/Sources/PhysicalClickMonitor.swift" "$project_root/Sources/PrivacyLockController.swift" \
   "$project_root/Tests/PrivacyLiveTests.swift" \
-  -framework AppKit -framework Carbon -framework Security \
+  -framework AppKit -framework LocalAuthentication \
   -o "$project_root/.build/tests/privacy-live-tests"
-"$project_root/.build/tests/privacy-live-tests" "${1:-$project_root/.build/privacy-live}" "$project_root/Resources/Translations/ko.json"
+output="${1:-$project_root/.build/privacy-live}"
+if (( $# > 0 )); then shift; fi
+"$project_root/.build/tests/privacy-live-tests" "$output" "$project_root/Resources/Translations/ko.json" "$@"

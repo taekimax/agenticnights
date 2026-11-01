@@ -14,8 +14,10 @@ redistributed code and binaries.
 - Reviewed revision: `2be93dd7f390b23fbca934ff3b1ac03468a80077`
   (source and license checked 2026-10-30).
 
-`Sources/SleepPrevention.swift` adapts the `caffeinate -di -w <pid>` lifecycle
-from KeepingYouAwake to Swift `Process`. The original source notice is
+`Sources/SleepPrevention.swift` adapts KeepingYouAwake’s parent-bounded
+`caffeinate` lifecycle and finite-duration `-t` timeout to Swift `Process`.
+The display option selects `-di` or `-i`, with `-w <pid>` in both modes.
+The original source notice is
 `Copyright (c) 2014 Marcel Dierkes. All rights reserved.`
 
 ### KeepingYouAwake license text
@@ -46,16 +48,18 @@ SOFTWARE.
 
 ## Platform components
 
-AppKit, Foundation, Carbon, OSLog, SF Symbols and `/usr/bin/caffeinate` are macOS
-components. Their licenses are separate from this project's MIT license.
+AppKit, Foundation, CoreGraphics, ColorSync, Carbon, LocalAuthentication, OSLog,
+SF Symbols, DisplayServices, the login framework, `/usr/bin/security` and
+`/usr/bin/caffeinate` are macOS components. Their licenses are separate from
+this project's MIT license.
 
 ## Curtain
 
 - Project: [acamarata/curtain](https://github.com/acamarata/curtain)
 - Reviewed revision: `0b2295fc15f5a0e3f2ad8ffd36684f8d7c4809a8` (2026-10-31).
 - License: MIT; Copyright (c) 2026 Aric Camarata.
-- Local implementations: `PhysicalInputFilter.swift`, `DisplayBlackout.swift`, and `PrivacyLockController.swift` follow Curtain's physical-input filtering, gamma blackout, non-key password prompt, and macOS lock fallback.
-- Differences and RustDesk design references are recorded in `docs/privacy-protection-2026-10-31.md`. No RustDesk source code is incorporated.
+- Local implementations: [DisplayBlackout.swift](Sources/DisplayBlackout.swift) follows gamma blackout and restoration; [PhysicalClickMonitor.swift](Sources/PhysicalClickMonitor.swift) uses event-source classification with global/local AppKit mouse monitors; [PrivacyLockController.swift](Sources/PrivacyLockController.swift) uses temporary non-key black backdrops during system authentication and the macOS lock request. Input interception and the former app-password prompt are removed.
+- The current implementation is recorded in [the 2.0 delivery record](docs/no-permission-delivery-2026-11-02.md); [the earlier record](docs/privacy-protection-2026-10-31.md) preserves historical differences. [RustDesk display reconfiguration handling](https://github.com/rustdesk/rustdesk/blob/3b7e2cebd9303a43eecb9bc96921548df846f45d/src/platform/macos.mm) informs event-triggered gamma refresh. No RustDesk source code is incorporated.
 
 ```text
 MIT License

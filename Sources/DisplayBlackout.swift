@@ -46,7 +46,7 @@ final class DisplayBlackout {
     }
 
     /// Reconcile newly connected displays before blackening any new output.
-    /// Call periodically and after display/wake notifications; macOS may reset ramps.
+    /// Call after display/wake notifications and their bounded retries; macOS may reset ramps.
     func refresh() throws {
         guard isActive else { return }
         let displays = try onlineDisplays()
@@ -58,8 +58,8 @@ final class DisplayBlackout {
         for (_, display) in displays { try blacken(display) }
     }
 
-    /// Show the password windows before pausing, so restoring gamma reveals only
-    /// those windows. On failure reapply blackout and leave the pause uncommitted.
+    /// Show the authentication backdrops before pausing, so restoring gamma reveals only
+    /// the system authentication UI. On failure reapply blackout and leave the pause uncommitted.
     func pause() throws {
         guard isActive, !isPaused else { return }
         let displays = try onlineDisplays()
@@ -76,7 +76,7 @@ final class DisplayBlackout {
         }
     }
 
-    /// Reapply blackout before removing the password windows.
+    /// Reapply blackout before removing the authentication backdrops.
     func resume() throws {
         guard isActive, isPaused else { return }
         let displays = try onlineDisplays()
