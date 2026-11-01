@@ -49,8 +49,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.button?.target = self
         statusItem.button?.action = #selector(iconClicked(_:))
         statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        // A click that ends blackout or opens authentication is consumed by that request.
+        // Clicks while the prompt is already open start nothing and stay usable.
         privacy.onPhysicalClick = { [weak self] event in
-            guard let self, !self.privacy.isLocked, event.type == .leftMouseDown else { return }
+            guard let self, !self.privacy.isAuthenticating else { return }
             self.dismissalMouseNumber = event.cgEvent?.getIntegerValueField(.mouseEventNumber)
         }
         privacy.onChange = { [weak self] in self?.refreshStatus() }
@@ -65,7 +67,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.userActivity.reset()
             self.schedule.reset()
             self.privacyError = nil
-            if self.quitAfterUnlock { self.quitAfterUnlock = false; NSApp.terminate(nil) }
+            // Unlock can complete synchronously inside applicationShouldTerminate.
+            if self.quitAfterUnlock { self.quitAfterUnlock = false; DispatchQueue.main.async { NSApp.terminate(nil) } }
             else { self.updateState() }
         }
         shortcut = GlobalShortcut(shortcut: settings.shortcut) { [weak self] in self?.toggleCover() }
@@ -80,6 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             dismissalMouseNumber != nil &&
             dismissalMouseNumber == event?.cgEvent?.getIntegerValueField(.mouseEventNumber)
         dismissalMouseNumber = nil
+        guard !dismissedByThisClick else { return }
         let opensMenu = event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true ||
             event?.modifierFlags.contains(.option) == true || settings.iconAction == .openMenu
         if opensMenu {
@@ -90,7 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else {
             switch settings.iconAction {
             case .openMenu: break
-            case .blackOut: if !privacy.isCovered && !dismissedByThisClick { showCover() }
+            case .blackOut: if !privacy.isCovered { showCover() }
             case .toggleSleep: toggleAwakeEnabled()
             }
         }
@@ -348,6 +352,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         let old = settings
         let candidate = newSettings.validated()
+        if candidate.requireAuthentication && !old.requireAuthentication,
+           let reason = PrivacyLockController.authenticationUnavailableReason() { return reason }
         if candidate.shortcut != old.shortcut || shortcut?.registrationStatus != noErr {
             guard shortcut?.replace(with: candidate.shortcut) == noErr else { return tr("error.shortcut") }
         }

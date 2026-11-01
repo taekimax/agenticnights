@@ -53,8 +53,17 @@ final class PrivacyLockController {
         var error: NSError?
         guard authentication.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
             authentication.invalidate()
-            onAuthenticationCancelled?()
-            if let error { onError?(error.localizedDescription) }
+            let message = (error ?? LAError(.passcodeNotSet) as NSError).localizedDescription
+            // An account without a login password can never authenticate, so
+            // nothing could end blackout or quit the app. End it and report.
+            // Other failures keep blackout; they are not a permanent condition.
+            if error?.domain == LAErrorDomain && error?.code == LAError.Code.passcodeNotSet.rawValue {
+                shutdown()
+                onUnlock?()
+            } else {
+                onAuthenticationCancelled?()
+            }
+            onError?(message)
             return
         }
         cancelRefreshes()
@@ -92,6 +101,15 @@ final class PrivacyLockController {
                 }
             }
         }
+    }
+
+    /// Returns why macOS account authentication cannot run, or nil if it can.
+    static func authenticationUnavailableReason() -> String? {
+        let context = LAContext()
+        defer { context.invalidate() }
+        var error: NSError?
+        guard !context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else { return nil }
+        return (error ?? LAError(.passcodeNotSet) as NSError).localizedDescription
     }
 
     /// Configuration changes invalidate the current system prompt. Reapply now
