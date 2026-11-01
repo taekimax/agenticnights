@@ -35,7 +35,7 @@ The old `CoverController` and menu-bar hiding preference are removed. Gamma is t
 
 ## Behavior
 
-Blackout waits for physical inactivity. It is suppressed while Settings or a menu is open. Both automatic and manual blackout use the same controller. Ordinary mode consumes the physical key/click that dismisses it; mouse movement dismissal is optional. Synthetic agent input and app activation leave blackout in place.
+Blackout waits for physical inactivity. It is suppressed while Settings or a menu is open. Both automatic and manual blackout use the same controller. The event tap consumes the physical key/click that dismisses ordinary mode; modifier changes also request dismissal, and mouse movement dismissal is optional. While ordinary blackout is active, a 100 ms HID keyboard-counter check provides a fallback for keys the tap misses. That fallback detects activity without reading characters but cannot consume an event the tap did not receive. It resets after session suspension and is disabled for password protection. Normal session/private-source synthetic input and app activation leave blackout in place.
 
 Sleep prevention starts immediately when enabled within its scheduled hours. Input, menus and Settings do not stop it. Its optional deadline starts at activation and survives restart; expiry disables the feature. Password protection overrides its hours and timer until authenticated unlock. Manual macOS lock, sleep and inactive sessions release interception so login input remains usable.
 
@@ -63,3 +63,11 @@ Status records state, permission availability and the owned caffeinate PID; it c
 [Implementation record](docs/privacy-protection-2026-10-31.md) distinguishes earlier physical checks from current build and delivery checks. Per the 2026-11-01 request, this revision adds no separate tests and does not rerun behavior experiments. Earlier checks do not validate the new backoff or animation. Real Keychain, third-party agents, HDR/EDR workflows and failure-triggered macOS login lock remain separate checks. DisplayLink is unsupported.
 
 Distribute [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) with the app.
+
+## Keyboard dismissal delivery — 2026-11-01
+
+Version 1.5.2 (build 13) adds modifier-event dismissal and a content-free HID keyboard-counter fallback for ordinary blackout. `Scripts/test.sh` passed keyboard activity, schedule, localization and in-memory password checks. The versioned build and staged/installed signature and full payload comparison passed. Physical keyboard confirmation is NOT RUN.
+
+Installed and launched `/Applications/agenticnights.app`; app-owned sleep prevention is active and existing settings are preserved. The new process reports `accessibilityGranted: false`, so screen blackout awaits the user's re-registration of the installed app in System Settings → Privacy & Security → Accessibility. Launch success does not establish keyboard dismissal in use.
+
+Prior installation: `~/.Trash/agenticnights-20261101-152322-188220.app`. Generated icon intermediates and the empty task caffeinate log were moved to `~/.Trash/agenticnights-keyboard-cleanup-20261101-152327`; build caches and earlier verification evidence remain.

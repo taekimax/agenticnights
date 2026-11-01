@@ -8,7 +8,7 @@
 
 Screen blackout and sleep prevention for macOS.
 
-**1.5.1 · macOS 13+ · English / Korean · MIT**
+**1.5.2 · macOS 13+ · English / Korean · MIT**
 
 ### Install
 
@@ -80,7 +80,7 @@ Edit files in `~/Library/Application Support/agenticnights/Translations/`, then 
 
 macOS 화면 가림과 잠자기 방지 앱입니다.
 
-**1.5.1 · macOS 13 이상 · 영어 / 한국어 · MIT**
+**1.5.2 · macOS 13 이상 · 영어 / 한국어 · MIT**
 
 ### 설치
 

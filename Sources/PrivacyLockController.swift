@@ -6,6 +6,8 @@ import Carbon
 final class PrivacyLockController {
     private let blackout = DisplayBlackout()
     private let input = PhysicalInputFilter()
+    private var keyboardActivity = KeyboardActivity()
+    private var keyboardTimer: Timer?
     private let password: UnlockPassword
     private var windows: [NSWindow] = []
     private var dots: [NSTextField] = []
@@ -40,6 +42,7 @@ final class PrivacyLockController {
         if requirePassword, try !password.hasPassword() { throw DisplayBlackout.Failure(message: tr("privacy.noPassword")) }
         passwordRequired = requirePassword
         input.onPhysicalKey = { [weak self] key, chars, flags in self?.receiveKey(key, characters: chars, flags: flags) }
+        input.onPhysicalModifier = { [weak self] in self?.requestUnlock() }
         input.onPhysicalClick = { [weak self] in self?.requestUnlock() }
         input.onPhysicalMove = { [weak self] in
             guard let self, !self.passwordRequired, self.dismissOnMouseMove else { return }
@@ -55,6 +58,7 @@ final class PrivacyLockController {
         systemLockRequired = false
         retryAfter = nil
         generation += 1
+        startKeyboardFallback()
         onChange?()
     }
 
@@ -90,6 +94,7 @@ final class PrivacyLockController {
     func suspend() {
         guard isCovered else { return }
         suspended = true
+        stopKeyboardFallback()
         generation += 1; checking = false; buffer = ""
         input.stop()
         let errors = blackout.end()
@@ -104,6 +109,7 @@ final class PrivacyLockController {
             try input.start()
             try blackout.begin()
             suspended = false
+            startKeyboardFallback()
             reportedFailure = false
         } catch { handleFailure(error.localizedDescription) }
         onChange?()
@@ -120,6 +126,7 @@ final class PrivacyLockController {
 
     /// Teardown and unprotected dismissal. Protected UI paths must authenticate.
     func shutdown() {
+        stopKeyboardFallback()
         generation += 1
         isCovered = false
         suspended = false
@@ -130,6 +137,24 @@ final class PrivacyLockController {
         input.stop()
         if !errors.isEmpty { onError?(errors.joined(separator: "\n")) }
         onChange?()
+    }
+
+    private func startKeyboardFallback() {
+        stopKeyboardFallback()
+        // Activity alone must never authenticate or supply password characters.
+        guard !passwordRequired else { return }
+        keyboardActivity.reset()
+        let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
+            guard let self, self.isCovered, !self.suspended, !self.passwordRequired else { return }
+            if self.keyboardActivity.consume() { self.requestUnlock() }
+        }
+        keyboardTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func stopKeyboardFallback() {
+        keyboardTimer?.invalidate()
+        keyboardTimer = nil
     }
 
     private func receiveKey(_ code: UInt16, characters: String?, flags: UInt64) {

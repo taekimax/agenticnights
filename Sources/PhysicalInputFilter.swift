@@ -14,6 +14,7 @@ final class PhysicalInputFilter {
     /// Delivered on the main thread. Characters are transient unlock input only;
     /// this class neither stores nor logs key content.
     var onPhysicalKey: ((UInt16, String?, UInt64) -> Void)?
+    var onPhysicalModifier: (() -> Void)?
     var onPhysicalClick: (() -> Void)?
     var onPhysicalMove: (() -> Void)?
 
@@ -128,6 +129,11 @@ final class PhysicalInputFilter {
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.isCurrent(currentGeneration) else { return }
                 self.onPhysicalKey?(keycode, characters, flags)
+            }
+        } else if type == .flagsChanged {
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.isCurrent(currentGeneration) else { return }
+                self.onPhysicalModifier?()
             }
         } else if type == .leftMouseDown || type == .rightMouseDown || type == .otherMouseDown {
             DispatchQueue.main.async { [weak self] in
