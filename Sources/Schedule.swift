@@ -82,6 +82,7 @@ struct VeilSettings: Codable, Equatable, Sendable {
     var awake = AwakeSettings.defaults
     var iconAction = IconAction.blackOut
     var requireAuthentication = false
+    var dimKeyboardBacklight = true
     var shortcut = KeyboardShortcut.defaults
 
     static let defaults = VeilSettings()
@@ -99,7 +100,7 @@ struct VeilSettings: Codable, Equatable, Sendable {
 
 extension VeilSettings {
     private enum CodingKeys: String, CodingKey {
-        case enabled, intervalMinutes, awake, iconAction, requireAuthentication, shortcut
+        case enabled, intervalMinutes, awake, iconAction, requireAuthentication, dimKeyboardBacklight, shortcut
     }
     private enum LegacyKeys: String, CodingKey { case passwordProtection }
 
@@ -113,6 +114,7 @@ extension VeilSettings {
         )
         requireAuthentication = try values.decodeIfPresent(Bool.self, forKey: .requireAuthentication)
             ?? legacy.decodeIfPresent(Bool.self, forKey: .passwordProtection) ?? false
+        dimKeyboardBacklight = try values.decodeIfPresent(Bool.self, forKey: .dimKeyboardBacklight) ?? true
         iconAction = try values.decodeIfPresent(IconAction.self, forKey: .iconAction) ?? .blackOut
         shortcut = (try? values.decode(KeyboardShortcut.self, forKey: .shortcut)) ?? .defaults
         // Very old releases tied sleep prevention to the blackout switch.

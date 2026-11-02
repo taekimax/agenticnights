@@ -12,6 +12,8 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate, NSTextFieldDel
     enum Focus { case delay, duration }
 
     private let enabledButton = NSButton(checkboxWithTitle: tr("blackout.auto"), target: nil, action: nil)
+    private let keyboardButton = NSButton(checkboxWithTitle: tr("blackout.keyboard"), target: nil, action: nil)
+    private let keyboardSupported: Bool
     private let intervalField = NSTextField(string: "10")
     private let protectionButton = NSButton(checkboxWithTitle: tr("blackout.requireAuth"), target: nil, action: nil)
     private let awakeEnabledButton = NSButton(checkboxWithTitle: tr("sleep.enable"), target: nil, action: nil)
@@ -36,7 +38,8 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate, NSTextFieldDel
     var onRecordingChanged: ((Bool) -> Void)?
     var onClose: (() -> Void)?
 
-    init() {
+    init(keyboardSupported: Bool = KeyboardBacklight.isSupported) {
+        self.keyboardSupported = keyboardSupported
         let available = NSScreen.main?.visibleFrame.size ?? NSSize(width: 1024, height: 900)
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0,
                                                   width: min(640, available.width - 60),
@@ -79,6 +82,7 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate, NSTextFieldDel
     }
 
     private func refreshControls() {
+        keyboardButton.state = settings.dimKeyboardBacklight ? .on : .off
         enabledButton.state = settings.enabled ? .on : .off
         protectionButton.state = settings.requireAuthentication ? .on : .off
         awakeEnabledButton.state = settings.awake.enabled ? .on : .off
@@ -135,7 +139,7 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate, NSTextFieldDel
         }
         intervalField.setAccessibilityLabel(tr("blackout.delay"))
         awakeDurationField.setAccessibilityLabel(tr("sleep.duration"))
-        for button in [enabledButton, protectionButton, awakeEnabledButton, displayButton] {
+        for button in [enabledButton, protectionButton, keyboardButton, awakeEnabledButton, displayButton] {
             button.target = self
             button.action = #selector(toggleChanged(_:))
         }
@@ -166,6 +170,7 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate, NSTextFieldDel
         statusLabel.font = .systemFont(ofSize: 12)
         statusLabel.textColor = .secondaryLabelColor
 
+        keyboardButton.isEnabled = keyboardSupported
         let blackout = section("blackout.title", views: [
             hint("blackout.about"), enabledButton,
             row([NSTextField(labelWithString: tr("blackout.delay")), intervalField, minutesLabel()]),
@@ -173,7 +178,8 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate, NSTextFieldDel
             protectionButton, hint("blackout.requireAuthHint"), hint("blackout.requireAuthOffHint"),
             row([NSTextField(labelWithString: tr("blackout.shortcut")), shortcutButton, reset]),
             shortcutError, hint("blackout.shortcutHint"), hint("settings.shortcutHint"),
-            hint("blackout.voiceOver"), hint("blackout.dim")
+            hint("blackout.voiceOver"), hint("blackout.dim"), keyboardButton,
+            hint(keyboardSupported ? "blackout.keyboardHint" : "blackout.keyboardUnavailable")
         ])
         let sleep = section("sleep.title", views: [
             awakeEnabledButton, hint("sleep.enableHint"), displayButton, hint("sleep.displayHint"),
@@ -255,6 +261,7 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate, NSTextFieldDel
         let enabled = sender.state == .on
         apply { settings in
             if sender === enabledButton { settings.enabled = enabled }
+            else if sender === keyboardButton { settings.dimKeyboardBacklight = enabled }
             else if sender === protectionButton { settings.requireAuthentication = enabled }
             else if sender === awakeEnabledButton {
                 settings.awake.enabled = enabled
