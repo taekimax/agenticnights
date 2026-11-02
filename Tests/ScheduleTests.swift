@@ -189,11 +189,11 @@ enum ScheduleTests {
 
     private static func currentSettings() throws {
         let defaults = try JSONDecoder().decode(VeilSettings.self, from: Data("{}".utf8))
-        try expect(defaults == .defaults && defaults.dimKeyboardBacklight, "Missing keyboard setting defaults on")
+        try expect(defaults == .defaults, "Empty record uses current defaults")
         try expect(defaults.awake.keepDisplayOn && defaults.iconAction == .blackOut, "Display stays on and icon blacks out by default")
         let edited = VeilSettings(enabled: false, intervalMinutes: 25,
             awake: AwakeSettings(enabled: true, keepDisplayOn: false, timerEnabled: true, durationMinutes: 40, expiresAt: date(12)),
-            iconAction: .openMenu, requireAuthentication: true, dimKeyboardBacklight: false,
+            iconAction: .openMenu, requireAuthentication: true,
             shortcut: KeyboardShortcut(keyCode: 45, modifiers: KeyboardShortcut.command | KeyboardShortcut.shift))
         let restored = try JSONDecoder().decode(VeilSettings.self, from: JSONEncoder().encode(edited))
         try expect(restored == edited, "Current preferences and deadlines round trip")

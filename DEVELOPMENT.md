@@ -1,6 +1,6 @@
 # Development
 
-Swift / AppKit, macOS 13+, no package dependencies. Version 2.1.0 (build 16). [User guide](README.md).
+Swift / AppKit, macOS 13+, no package dependencies. Version 2.1.1 (build 17). [User guide](README.md).
 
 ## Build and delivery
 
@@ -26,7 +26,6 @@ All files below are under `Sources/`.
 | --- | --- |
 | `DisplayBlackout.swift` | Save full gamma ramps, blacken connected displays, restore originals |
 | `DisplayBrightness.swift` | Optional DisplayServices loading, supported-display brightness capture/dimming/restoration; injectable test backend |
-| `KeyboardBacklight.swift` | Optional CoreBrightness loading, built-in keyboard dimming with readback, injectable backend and crash recovery journal |
 | `PhysicalClickMonitor.swift` | Global and local AppKit mouse-down monitors; source-state 1 classification; pass events through |
 | `PrivacyLockController.swift` | Blackout lifecycle, system authentication, temporary black backdrops, VoiceOver observation and macOS lock request |
 | `UserActivity.swift` | Physical-input idle duration, capped after wake/session return |
@@ -40,8 +39,6 @@ All files below are under `Sources/`.
 | `Localization.swift` | Bundled English/Korean, language selection, validated user overrides and old-default recognition |
 
 ## Behavior
-
-Keyboard backlight dimming defaults on, applies only while a built-in display is active, and restores before authentication, suspension or shutdown. Values at or near zero are never saved as originals, and user brightness changes are preserved. A journal (owner PID, owner start time and originals) is saved before dimming; entries that cannot be restored stay journaled and are retried by the next blackout, session return or launch, never while another running instance owns the journal. Private selector signatures are checked before use; immediate uncommitted KBC writes fall back to BSC `setProperty` when readback, including the measured level, does not match.
 
 Gamma is the normal blackout mechanism. Global and local mouse monitors run only during active blackout and observe left/right/other button presses. Both monitors are intentional: global monitoring covers other apps, while local monitoring covers this app. Events pass through unchanged. Hardware source-state 1 requests dismissal; normal session/private-source automation does not. Movement, scrolling and keyboard events are not monitored for dismissal. The first click and all keyboard input reach the front app.
 
@@ -59,7 +56,6 @@ Settings apply immediately. Minute fields commit on Return or focus departure; i
 
 - Settings: JSON under `settings` in UserDefaults domain `com.tk.agenticnights`.
 - Translations: `~/Library/Application Support/agenticnights/Translations/`.
-- Keyboard recovery journal: `~/Library/Application Support/agenticnights/keyboard-backlight.json`.
 - Status: `~/Library/Application Support/agenticnights/status.json`; check `running`, PID and `bundlePath` before relying on it.
 
 Old `passwordProtection` becomes `requireAuthentication`. `LegacyPasswordCleanup` removes the retired `com.tk.agenticnights.unlock` / `privacy-cover-password` entry through `/usr/bin/security`; `legacyPasswordRemoved` is recorded only after removal or confirmation that the item is absent. The app stores no new authentication secret. Old sleep settings default Keep Display On to true. Icon values `both`/`cover` become `blackOut`, and `awake` becomes `toggleSleep`. Obsolete schedules and movement-dismissal fields are discarded on encoding.

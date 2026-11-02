@@ -90,7 +90,7 @@ private final class Runner: NSObject, NSApplicationDelegate {
         guard !saved.isEmpty else { finish(); return }
         do {
             let authentication = CommandLine.arguments.contains("--authentication")
-            try cover.start(requireAuthentication: authentication, dimKeyboard: false)
+            try cover.start(requireAuthentication: authentication)
             expect(cover.isCovered && cover.isLocked == authentication, "requested blackout state is active")
             expect(gammaIsZero, "active display gamma ramps are zero")
             if authentication {

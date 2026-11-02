@@ -32,7 +32,7 @@ enum SettingsWindowTests {
     }
 
     static func check(_ language: String) throws {
-        let controller = SettingsWindow(keyboardSupported: true)
+        let controller = SettingsWindow()
         let content = controller.window!.contentView!
         let views = descendants(content)
         let fields = views.compactMap { $0 as? NSTextField }.filter(\.isEditable)
@@ -41,7 +41,6 @@ enum SettingsWindowTests {
         let duration = fields.first { $0.accessibilityLabel() == tr("sleep.duration") }!
         let buttons = views.compactMap { $0 as? NSButton }
         let enabled = buttons.first { $0.title == tr("blackout.auto") }!
-        let keyboard = buttons.first { $0.title == tr("blackout.keyboard") }!
         let display = buttons.first { $0.title == tr("sleep.display") }!
         let reset = buttons.first { $0.title == tr("settings.shortcutReset") }!
         let shortcut = buttons.first { $0.accessibilityLabel() == tr("settings.shortcutRecord") }!
@@ -62,20 +61,6 @@ enum SettingsWindowTests {
         expect(changes == 0, "Rendering cannot save preferences")
         enabled.performClick(nil)
         expect(!current.enabled && changes == 1, "Checkbox must apply immediately")
-
-        expect(keyboard.isEnabled && keyboard.state == .on, "Supported keyboard defaults on")
-        keyboard.performClick(nil)
-        expect(!current.dimKeyboardBacklight, "Keyboard setting applies immediately")
-
-        let unavailable = SettingsWindow(keyboardSupported: false)
-        unavailable.updateStatus("", settings: .defaults)
-        let unavailableViews = descendants(unavailable.window!.contentView!)
-        expect(unavailableViews.compactMap { $0 as? NSButton }.contains {
-            $0.title == tr("blackout.keyboard") && !$0.isEnabled && $0.state == .on
-        }, "Unsupported checkbox is disabled without clearing preference")
-        expect(unavailableViews.compactMap { $0 as? NSTextField }.contains {
-            $0.stringValue == tr("blackout.keyboardUnavailable")
-        }, "Unsupported keyboard explains availability")
 
         func type(_ text: String, into field: NSTextField) {
             field.stringValue = text
@@ -134,28 +119,25 @@ enum SettingsWindowTests {
         reset.performClick(nil)
         expect(current.shortcut == .defaults, "Available shortcut reset must apply immediately")
 
-        for (layoutController, layoutViews) in [(controller, views), (unavailable, unavailableViews)] {
-            let content = layoutController.window!.contentView!
-            let scroll = content.subviews.compactMap { $0 as? NSScrollView }.first!
-            for width in [640.0, 560.0] {
-                layoutController.window!.setContentSize(NSSize(width: width, height: 600))
-                content.layoutSubtreeIfNeeded()
-                expect(abs(scroll.documentView!.frame.width - scroll.contentView.bounds.width) < 1,
-                       "Settings must scroll vertically without horizontal overflow")
-                expect(scroll.documentView!.frame.height > 0, "Scroll content must have a measured height")
-                for view in layoutViews where !view.isHidden {
-                    if let button = view as? NSButton {
-                        expect(button.frame.width >= button.fittingSize.width - 1,
-                               "Button title must fit: \(button.title)")
-                    }
-                    if let label = view as? NSTextField, !label.isEditable {
-                        let needed = label.cell!.cellSize(forBounds: NSRect(x: 0, y: 0, width: label.bounds.width, height: 10_000))
-                        expect(needed.height <= label.bounds.height + 1,
-                               "Label must have enough height: \(label.stringValue)")
-                    }
+        let scroll = content.subviews.compactMap { $0 as? NSScrollView }.first!
+        for width in [640.0, 560.0] {
+            controller.window!.setContentSize(NSSize(width: width, height: 600))
+            content.layoutSubtreeIfNeeded()
+            expect(abs(scroll.documentView!.frame.width - scroll.contentView.bounds.width) < 1,
+                   "Settings must scroll vertically without horizontal overflow")
+            expect(scroll.documentView!.frame.height > 0, "Scroll content must have a measured height")
+            for view in views where !view.isHidden {
+                if let button = view as? NSButton {
+                    expect(button.frame.width >= button.fittingSize.width - 1,
+                           "Button title must fit: \(button.title)")
                 }
-                print("Layout \(language): window=\(content.frame.size), document=\(scroll.documentView!.frame.size)")
+                if let label = view as? NSTextField, !label.isEditable {
+                    let needed = label.cell!.cellSize(forBounds: NSRect(x: 0, y: 0, width: label.bounds.width, height: 10_000))
+                    expect(needed.height <= label.bounds.height + 1,
+                           "Label must have enough height: \(label.stringValue)")
+                }
             }
+            print("Layout \(language): window=\(content.frame.size), document=\(scroll.documentView!.frame.size)")
         }
         print("PASS: \(language) offscreen immediate changes, Return/blur validation, live updates, duration preservation, shortcut rejection, scroll layout")
         controller.onChange = nil

@@ -6,7 +6,6 @@ mkdir -p "$project_root/.build/tests" "$project_root/.build/ModuleCache"
 xcrun swiftc -swift-version 5 -num-threads 2 \
   -module-cache-path "$project_root/.build/ModuleCache" \
   "$project_root/Sources/DisplayBlackout.swift" "$project_root/Sources/DisplayBrightness.swift" \
-  "$project_root/Sources/KeyboardBacklight.swift" \
   "$project_root/Sources/PhysicalClickMonitor.swift" "$project_root/Sources/PrivacyLockController.swift" \
   "$project_root/Tests/PrivacyLiveTests.swift" \
   -framework AppKit -framework LocalAuthentication \

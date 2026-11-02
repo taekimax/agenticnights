@@ -8,7 +8,7 @@
 
 Screen blackout and sleep prevention for macOS, without a system permission grant.
 
-**2.1.0 · build 16 · macOS 13+ · English / Korean · MIT**
+**2.1.1 · build 17 · macOS 13+ · English / Korean · MIT**
 
 ### Install
 
@@ -39,8 +39,6 @@ Automatic Blackout starts after **10 minutes of physical inactivity** by default
 
 Blackout sets display gamma to zero, so compatible agents can still capture and use the desktop. Brightness is also reduced on displays macOS can control, including the built-in display. Ending or suspending blackout restores saved colors and brightness. Other external monitors need their own brightness controls; DisplayLink is unsupported.
 
-Keyboard backlight dimming is on by default and turns off the built-in keyboard backlight only while the built-in display is in use. Its previous brightness returns when blackout ends. If that fails, for example after a force quit, the app restores it at the next session return or launch unless you have changed it.
-
 **Click to end blackout.** Mouse movement, scrolling and typing leave it in place. Keyboard input and the first click pass through to the front app. Normal synthetic agent clicks leave blackout in place; agents sending hardware-source events may be treated as human input.
 
 Enable **Require Touch ID or password to end the blackout** to use the macOS authentication dialog. Touch ID or your Mac login password ends blackout. Cancelling, failed authentication or switching to another app restores blackout. While the dialog is open, black windows cover the desktop and appear in agent captures. The menu, shortcut and ordinary Quit requests use the same authentication flow. Turning the option off also requires authentication; other settings, such as Prevent Sleep, change without it. System shutdown and logout proceed normally. If macOS cannot authenticate the account, the option cannot be enabled. If the account has no login password, an active blackout ends without authentication.
@@ -67,7 +65,7 @@ Existing authentication preferences move to macOS account authentication. The re
 
 시스템 권한 허용 없이 사용하는 macOS 화면 가리기·잠자기 방지 앱입니다.
 
-**2.1.0 · 빌드 16 · macOS 13 이상 · 영어 / 한국어 · MIT**
+**2.1.1 · 빌드 17 · macOS 13 이상 · 영어 / 한국어 · MIT**
 
 ### 설치
 
@@ -97,8 +95,6 @@ open /Applications/agenticnights.app
 기본값은 **10분 동안 사용하지 않으면 자동으로 화면 가리기**입니다. 키보드·마우스·트랙패드 입력이 있으면 대기 시간이 다시 시작됩니다. 일반적인 에이전트 입력은 대기 시간을 연장하지 않습니다. 메뉴에서 대기 시간을 고르거나 설정에서 1–1440분을 입력하세요. 잘못된 입력은 이전 값을 유지하고 오류를 표시합니다.
 
 디스플레이 감마를 0으로 만들어 화면을 가립니다. 호환되는 에이전트는 계속 화면을 캡처하고 조작할 수 있습니다. 내장 화면 등 macOS에서 밝기를 조절할 수 있는 디스플레이는 밝기도 낮춥니다. 해제하거나 일시 중지하면 저장한 색상과 밝기를 복원합니다. 그 밖의 외장 모니터 밝기는 모니터 자체 메뉴로 조절하세요. DisplayLink는 지원하지 않습니다.
-
-키보드 백라이트 끄기는 기본으로 켜져 있으며, 내장 디스플레이를 사용하는 동안에만 내장 키보드 백라이트를 끕니다. 화면 가리기가 끝나면 이전 밝기로 돌아갑니다. 강제 종료 등으로 복원하지 못했다면 사용자가 밝기를 바꾸지 않은 경우에 한해 세션 복귀, 다음 실행 또는 다음 화면 가리기 때 복원합니다.
 
 **클릭하면 화면 가리기를 해제합니다.** 마우스 이동·스크롤·키 입력으로는 해제하지 않습니다. 키 입력과 첫 클릭은 맨 앞 앱에 그대로 전달됩니다. 일반적인 에이전트 클릭은 무시하지만, 하드웨어 출처로 입력하는 에이전트는 사람 입력으로 판정될 수 있습니다.
 

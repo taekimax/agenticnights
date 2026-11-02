@@ -34,7 +34,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var sessionAvailable: Bool { sessionActive && !sleeping && !displaySleeping && !screenLocked }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        KeyboardBacklight.recoverPending()
         signal(SIGTERM, SIG_IGN)
         terminationSignal = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
         terminationSignal?.setEventHandler { NSApp.terminate(nil) }
@@ -163,7 +162,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         schedule.reset()
         userActivity.reset()
         if sessionAvailable { privacy.resume() }
-        if !privacy.isCovered { KeyboardBacklight.recoverPending() }
         updateState()
     }
 
@@ -309,7 +307,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         settingsWindow?.close()
         idleTimer?.invalidate(); idleTimer = nil
         do {
-            try privacy.start(requireAuthentication: settings.requireAuthentication, dimKeyboard: settings.dimKeyboardBacklight)
+            try privacy.start(requireAuthentication: settings.requireAuthentication)
             privacyError = nil
         } catch {
             privacyError = error.localizedDescription
@@ -361,9 +359,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard shortcut?.replace(with: candidate.shortcut) == noErr else { return tr("error.shortcut") }
         }
         settings = candidate
-        if old.dimKeyboardBacklight != settings.dimKeyboardBacklight {
-            privacy.setKeyboardDimming(settings.dimKeyboardBacklight)
-        }
         let restartTimer = old.awake.enabled != settings.awake.enabled ||
             old.awake.timerEnabled != settings.awake.timerEnabled || old.awake.durationMinutes != settings.awake.durationMinutes
         settings.awake.expiresAt = restartTimer ? nil : old.awake.expiresAt
@@ -414,7 +409,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             "localizationWarnings": Localization.shared.warnings,
             "bundlePath": Bundle.main.bundlePath, "enabled": settings.enabled,
             "requireAuthentication": settings.requireAuthentication,
-            "dimKeyboardBacklight": settings.dimKeyboardBacklight,
             "covered": privacy.isCovered, "authenticationVisible": privacy.isAuthenticating,
             "iconAction": settings.iconAction.rawValue,
             "shortcut": settings.shortcut.displayName,

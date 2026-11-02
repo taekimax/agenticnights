@@ -9,7 +9,5 @@ compile=(xcrun swiftc -swift-version 5 -num-threads 2 -module-cache-path "$proje
 "$project_root/.build/tests/localization-tests" "$project_root/Resources/Translations"
 "${compile[@]}" "$project_root/Sources/DisplayBrightness.swift" "$project_root/Tests/DisplayBrightnessTests.swift" -o "$project_root/.build/tests/display-brightness-tests"
 "$project_root/.build/tests/display-brightness-tests"
-"${compile[@]}" "$project_root/Sources/KeyboardBacklight.swift" "$project_root/Tests/KeyboardBacklightTests.swift" -o "$project_root/.build/tests/keyboard-backlight-tests"
-"$project_root/.build/tests/keyboard-backlight-tests"
 "${compile[@]}" "$project_root/Sources/DisplayBlackout.swift" "$project_root/Sources/PhysicalClickMonitor.swift" "$project_root/Tests/PhysicalClickTests.swift" -framework AppKit -o "$project_root/.build/tests/physical-click-tests"
 "$project_root/.build/tests/physical-click-tests"

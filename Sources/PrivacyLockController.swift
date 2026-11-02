@@ -6,8 +6,6 @@ import LocalAuthentication
 final class PrivacyLockController {
     private let blackout = DisplayBlackout()
     private let brightness = DisplayBrightness()
-    private let keyboard = KeyboardBacklight()
-    private var keyboardDimming = true
     private let input = PhysicalClickMonitor()
     private var windows: [NSWindow] = []
     private var context: LAContext?
@@ -30,7 +28,7 @@ final class PrivacyLockController {
     var onUnlock: (() -> Void)?
     var onAuthenticationCancelled: (() -> Void)?
 
-    func start(requireAuthentication: Bool, dimKeyboard: Bool = true) throws {
+    func start(requireAuthentication: Bool) throws {
         guard !isCovered else { requestUnlock(); return }
         input.onClick = { [weak self] event in
             self?.onPhysicalClick?(event)
@@ -39,21 +37,13 @@ final class PrivacyLockController {
         try input.start()
         do { try blackout.begin() }
         catch { input.stop(); throw error }
-        keyboardDimming = dimKeyboard
         brightness.begin()
-        if keyboardDimming { keyboard.begin() }
         authenticationRequired = requireAuthentication
         isCovered = true
         suspended = false
         reportedFailure = false
         observeVoiceOver()
         onChange?()
-    }
-
-    func setKeyboardDimming(_ enabled: Bool) {
-        keyboardDimming = enabled
-        if enabled && isCovered && !suspended && !isAuthenticating { keyboard.begin() }
-        else { keyboard.end() }
     }
 
     func requestUnlock() {
@@ -89,7 +79,6 @@ final class PrivacyLockController {
             // Opaque windows are on screen before gamma or backlight is restored.
             try blackout.pause()
             brightness.end()
-            keyboard.end()
         } catch {
             cancelAuthentication()
             handleFailure(error.localizedDescription)
@@ -161,7 +150,6 @@ final class PrivacyLockController {
         input.stop()
         let errors = blackout.end()
         brightness.end()
-        keyboard.end()
         removeBackdrop()
         if wasAuthenticating { onAuthenticationCancelled?() }
         if !errors.isEmpty { onError?(errors.joined(separator: "\n")) }
@@ -174,7 +162,6 @@ final class PrivacyLockController {
             try input.start()
             try blackout.begin()
             brightness.begin()
-            if keyboardDimming { keyboard.begin() }
             suspended = false
             reportedFailure = false
             observeVoiceOver()
@@ -198,7 +185,6 @@ final class PrivacyLockController {
         suspended = false
         let errors = blackout.end()
         brightness.end()
-        keyboard.end()
         removeBackdrop()
         if !errors.isEmpty { onError?(errors.joined(separator: "\n")) }
         onChange?()
@@ -214,7 +200,6 @@ final class PrivacyLockController {
             try blackout.resume()
             try blackout.refresh()
             brightness.begin()
-            if keyboardDimming { keyboard.begin() }
             removeBackdrop()
         } catch {
             // Keep opaque windows if blackening failed; the system lock provides
@@ -331,7 +316,7 @@ final class PrivacyLockController {
 
     private func refreshDisplays() {
         guard isCovered, !suspended, !isAuthenticating else { return }
-        do { try blackout.refresh(); brightness.refresh(); keyboard.refresh() }
+        do { try blackout.refresh(); brightness.refresh() }
         catch { handleFailure(error.localizedDescription) }
     }
 
@@ -372,7 +357,6 @@ final class PrivacyLockController {
         voiceOverObservation?.invalidate()
         input.stop()
         brightness.end()
-        keyboard.end()
         blackout.end()
         windows.forEach { $0.close() }
     }
