@@ -12,8 +12,9 @@ enum LaunchAtLogin {
         switch SMAppService.mainApp.status {
         case .enabled: return .enabled
         case .requiresApproval: return .requiresApproval
-        case .notRegistered: return .disabled
-        case .notFound: return .unavailable
+        // macOS reports .notFound for an app that has never been registered;
+        // register() surfaces any real failure as an error.
+        case .notRegistered, .notFound: return .disabled
         @unknown default: return .unavailable
         }
     }
