@@ -119,6 +119,40 @@ enum SettingsWindowTests {
         reset.performClick(nil)
         expect(current.shortcut == .defaults, "Available shortcut reset must apply immediately")
 
+        let startup = buttons.first { $0.title == tr("startup.launch") }!
+        let openLoginItems = buttons.first { $0.title == tr("startup.openSettings") }!
+        let startupNote = views.compactMap { $0 as? NSTextField }.first { $0.stringValue == tr("startup.approval") }
+        expect(startupNote == nil, "Approval note starts empty")
+        var loginItem = LoginItemStatus(enabled: false, needsApproval: false, available: true)
+        var requests: [Bool] = []
+        var loginRefusal: String?
+        controller.loginItemStatus = { loginItem }
+        controller.onLoginItemChange = { enabled in
+            requests.append(enabled)
+            if loginRefusal == nil { loginItem.enabled = enabled }
+            return loginRefusal
+        }
+        let settingsChanges = changes
+        controller.updateStatus("On", settings: current)
+        expect(startup.state == .off && startup.isEnabled && openLoginItems.isHidden, "Login item reflects macOS state")
+        startup.performClick(nil)
+        expect(requests == [true] && startup.state == .on && changes == settingsChanges,
+               "Open at login applies through macOS, not saved settings")
+        loginRefusal = "Refused"
+        startup.performClick(nil)
+        expect(requests == [true, false] && startup.state == .on, "Refused change keeps the macOS state")
+        expect(views.compactMap { $0 as? NSTextField }.contains { $0.stringValue == "Refused" && !$0.isHidden },
+               "Refused change shows an error")
+        loginRefusal = nil
+        loginItem = LoginItemStatus(enabled: false, needsApproval: true, available: true)
+        controller.updateStatus("On", settings: current)
+        expect(startup.state == .on && !openLoginItems.isHidden, "Pending approval shows the System Settings link")
+        loginItem = LoginItemStatus(enabled: false, needsApproval: false, available: false)
+        controller.updateStatus("On", settings: current)
+        expect(!startup.isEnabled && openLoginItems.isHidden, "Unavailable registration disables the checkbox")
+        loginItem = LoginItemStatus(enabled: false, needsApproval: true, available: true)
+        controller.updateStatus("On", settings: current)
+
         let scroll = content.subviews.compactMap { $0 as? NSScrollView }.first!
         for width in [640.0, 560.0] {
             controller.window!.setContentSize(NSSize(width: width, height: 600))
@@ -139,7 +173,7 @@ enum SettingsWindowTests {
             }
             print("Layout \(language): window=\(content.frame.size), document=\(scroll.documentView!.frame.size)")
         }
-        print("PASS: \(language) offscreen immediate changes, Return/blur validation, live updates, duration preservation, shortcut rejection, scroll layout")
+        print("PASS: \(language) offscreen immediate changes, login item, Return/blur validation, live updates, duration preservation, shortcut rejection, scroll layout")
         controller.onChange = nil
     }
 }

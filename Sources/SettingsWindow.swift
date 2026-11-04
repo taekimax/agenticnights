@@ -4,6 +4,13 @@ extension IconAction {
     var title: String { tr("icon.\(rawValue)") }
 }
 
+/// Login-item state as macOS reports it; the window keeps no copy of its own.
+struct LoginItemStatus: Equatable {
+    var enabled: Bool
+    var needsApproval: Bool
+    var available: Bool
+}
+
 private final class SettingsDocumentView: NSView {
     override var isFlipped: Bool { true }
 }
@@ -21,6 +28,10 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate, NSTextFieldDel
     private let durationEntry = NSStackView()
     private let shortcutButton = NSButton()
     private let iconActionPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let startupButton = NSButton(checkboxWithTitle: tr("startup.launch"), target: nil, action: nil)
+    private let startupNote = NSTextField(wrappingLabelWithString: "")
+    private let openLoginItemsButton = NSButton(title: tr("startup.openSettings"), target: nil, action: nil)
+    private let startupError = NSTextField(wrappingLabelWithString: "")
     private let statusLabel = NSTextField(wrappingLabelWithString: "")
     private let delayError = NSTextField(wrappingLabelWithString: "")
     private let durationError = NSTextField(wrappingLabelWithString: "")
@@ -35,6 +46,11 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate, NSTextFieldDel
     var onChange: ((VeilSettings) -> String?)?
     var onRecordingChanged: ((Bool) -> Void)?
     var onClose: (() -> Void)?
+    /// Login items live in macOS, outside VeilSettings, and can change in System Settings.
+    var loginItemStatus: (() -> LoginItemStatus)?
+    /// Return an error when macOS refuses the change.
+    var onLoginItemChange: ((Bool) -> String?)?
+    var onOpenLoginItems: (() -> Void)?
 
     init() {
         let available = NSScreen.main?.visibleFrame.size ?? NSSize(width: 1024, height: 900)
@@ -56,7 +72,7 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate, NSTextFieldDel
     func present(settings: VeilSettings, status: String, focus: Focus? = nil) {
         if window?.isVisible != true {
             dirtyMinutes.removeAll()
-            for label in [delayError, durationError, shortcutError, changeError] { setError("", on: label) }
+            for label in [delayError, durationError, shortcutError, changeError, startupError] { setError("", on: label) }
         }
         updateStatus(status, settings: settings)
         showWindow(nil)
@@ -94,6 +110,17 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate, NSTextFieldDel
         durationEntry.isHidden = !settings.awake.timerEnabled &&
             !dirtyMinutes.contains(.duration) && awakeDurationField.currentEditor() == nil
         if keyMonitor == nil { updateShortcutTitle() }
+        refreshLoginItem()
+    }
+
+    private func refreshLoginItem() {
+        let status = loginItemStatus?() ?? LoginItemStatus(enabled: false, needsApproval: false, available: false)
+        startupButton.state = status.enabled || status.needsApproval ? .on : .off
+        startupButton.isEnabled = status.available
+        let note = !status.available ? tr("startup.unavailable") : (status.needsApproval ? tr("startup.approval") : "")
+        startupNote.stringValue = note
+        startupNote.isHidden = note.isEmpty
+        openLoginItemsButton.isHidden = !status.needsApproval
     }
 
     private func buildContent() {
@@ -139,7 +166,7 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate, NSTextFieldDel
             button.target = self
             button.action = #selector(toggleChanged(_:))
         }
-        for label in [delayError, durationError, shortcutError, changeError] {
+        for label in [delayError, durationError, shortcutError, changeError, startupError] {
             label.font = .systemFont(ofSize: 12)
             label.textColor = .systemRed
             label.isHidden = true
@@ -163,6 +190,15 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate, NSTextFieldDel
         iconActionPopup.target = self
         iconActionPopup.action = #selector(iconActionChanged)
         iconActionPopup.setAccessibilityLabel(tr("icon.click"))
+        startupButton.target = self
+        startupButton.action = #selector(startupChanged)
+        startupNote.font = .systemFont(ofSize: 12)
+        startupNote.textColor = .secondaryLabelColor
+        startupNote.isHidden = true
+        openLoginItemsButton.bezelStyle = .rounded
+        openLoginItemsButton.target = self
+        openLoginItemsButton.action = #selector(openLoginItems)
+        openLoginItemsButton.isHidden = true
         statusLabel.font = .systemFont(ofSize: 12)
         statusLabel.textColor = .secondaryLabelColor
 
@@ -184,7 +220,10 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate, NSTextFieldDel
         let icon = section("icon.title", views: [
             row([NSTextField(labelWithString: tr("icon.click")), iconActionPopup]), hint("icon.hint")
         ])
-        for view in [blackout, sleep, icon, changeError] {
+        let startup = section("startup.title", views: [
+            startupButton, hint("startup.hint"), startupNote, openLoginItemsButton, startupError
+        ])
+        for view in [blackout, sleep, icon, startup, changeError] {
             stack.addArrangedSubview(view)
             view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }
@@ -262,6 +301,14 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate, NSTextFieldDel
             } else if sender === displayButton { settings.awake.keepDisplayOn = enabled }
         }
     }
+
+    @objc private func startupChanged() {
+        setError("", on: startupError)
+        if let error = onLoginItemChange?(startupButton.state == .on) { setError(error, on: startupError) }
+        refreshLoginItem()
+    }
+
+    @objc private func openLoginItems() { onOpenLoginItems?() }
 
     @objc private func durationChanged() {
         let limited = durationPopup.indexOfSelectedItem == 1
@@ -348,6 +395,9 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate, NSTextFieldDel
     }
 
     func windowDidResignKey(_ notification: Notification) { stopRecording() }
+
+    /// Approval or removal in System Settings happens outside this window.
+    func windowDidBecomeKey(_ notification: Notification) { refreshLoginItem() }
 
     private func updateShortcutTitle() {
         shortcutButton.title = "\(settings.shortcut.displayName)  \(tr("settings.shortcutRecord"))"

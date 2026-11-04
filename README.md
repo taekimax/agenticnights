@@ -51,6 +51,10 @@ Turning on VoiceOver during blackout requests macOS login lock. Sleep, macOS loc
 
 Choose **No Limit** or a duration of 1–1440 minutes. The duration starts when enabled and does not change with keyboard or mouse activity. Changing a running duration restarts it from that moment. Its deadline survives app restarts. When it expires, macOS settings apply again. There are no scheduled hours. Closing the lid can still put the Mac to sleep.
 
+### Open at login
+
+Turn on **Open at login** in Settings to start agenticnights whenever you log in, including after a restart or after macOS ends your session. macOS stores this as a login item; manage or remove it in System Settings › General › Login Items. If macOS asks for approval, Settings shows **Open Login Items…**. Off by default.
+
 ### Language and upgrades
 
 Edit files in `~/Library/Application Support/agenticnights/Translations/`, then restart. `language.txt` accepts `auto`, `en`, `ko` or a custom language code. To add a language, copy [en.json](Resources/Translations/en.json) to `<code>.json`; preserve keys and `{placeholders}`. Missing or invalid entries fall back to bundled text. Previously exported default wording updates in memory; your files and custom edits are preserved.
@@ -107,6 +111,10 @@ open /Applications/agenticnights.app
 **잠자기 방지**는 켜는 즉시 시작하며 화면 가리기·인증과 독립적으로 동작합니다. 기본으로 켜진 **디스플레이 켜 두기**는 자동 화면 꺼짐도 막습니다. 화면을 사용하는 에이전트에 필요하며, 디스플레이가 꺼지면 macOS 설정에 따라 화면이 잠길 수 있습니다.
 
 **제한 없음** 또는 1–1440분의 유지 시간을 선택하세요. 켠 시점부터 계산하며 키보드·마우스를 사용해도 종료 시각은 바뀌지 않습니다. 실행 중 유지 시간을 바꾸면 바꾼 시점부터 다시 계산합니다. 앱을 다시 실행해도 종료 시각은 유지됩니다. 시간이 지나면 다시 macOS 설정을 따릅니다. 시간대 지정은 없습니다. 덮개를 닫으면 Mac이 잠들 수 있습니다.
+
+### 로그인 시 열기
+
+설정에서 **로그인 시 열기**를 켜면 로그인할 때마다 agenticnights가 실행됩니다. 재시동 후나 macOS가 세션을 종료한 뒤에도 적용됩니다. macOS가 로그인 항목으로 관리하며, 시스템 설정 › 일반 › 로그인 항목에서 확인하거나 제거할 수 있습니다. macOS가 승인을 요구하면 설정에 **로그인 항목 열기…** 버튼이 표시됩니다. 기본값은 꺼짐입니다.
 
 ### 언어와 업그레이드
 

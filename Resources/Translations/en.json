@@ -62,5 +62,12 @@
   "settings.shortcutReset": "Default",
   "settings.shortcutHint": "⌘, ⌥ or ⌃ + A–Z, 0–9 or F1–F20. Esc cancels recording.",
   "settings.shortcutInvalid": "Use ⌘, ⌥ or ⌃ with A–Z, 0–9 or F1–F20.",
-  "settings.shortcutConflict": "Shortcut unavailable. Choose another combination."
+  "settings.shortcutConflict": "Shortcut unavailable. Choose another combination.",
+  "startup.title": "Startup",
+  "startup.launch": "Open at login",
+  "startup.hint": "Starts agenticnights when you log in, including after a restart or when macOS ends your session. Manage it in System Settings › General › Login Items.",
+  "startup.approval": "Waiting for approval in System Settings › General › Login Items.",
+  "startup.openSettings": "Open Login Items…",
+  "startup.unavailable": "macOS cannot register this copy as a login item. Install the app in Applications.",
+  "error.startup": "Couldn't change Open at login: {error}"
 }

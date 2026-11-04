@@ -340,6 +340,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             settingsWindow?.onClose = { [weak self] in
                 DispatchQueue.main.async { self?.updateState() }
             }
+            settingsWindow?.loginItemStatus = {
+                let state = LaunchAtLogin.state
+                return LoginItemStatus(enabled: state == .enabled, needsApproval: state == .requiresApproval,
+                                       available: state != .unavailable)
+            }
+            settingsWindow?.onLoginItemChange = { [weak self] enabled in
+                let error = LaunchAtLogin.set(enabled)
+                if let error { self?.log.error("Login item: \(error, privacy: .public)") }
+                self?.refreshStatus()
+                return error.map { tr("error.startup", ["error": $0]) }
+            }
+            settingsWindow?.onOpenLoginItems = { LaunchAtLogin.openSystemSettings() }
         }
         settingsWindow?.present(settings: settings, status: awakeStatusText, focus: focus)
         refreshStatus()
@@ -419,7 +431,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             "awakeTimerEnabled": settings.awake.timerEnabled, "awakeDurationMinutes": settings.awake.durationMinutes,
             "coverStatus": coverStatusText, "awakeStatus": awakeStatusText,
             "shortcutStatus": shortcut?.registrationStatus ?? -1,
-            "sessionAvailable": sessionAvailable
+            "sessionAvailable": sessionAvailable,
+            "launchAtLogin": LaunchAtLogin.state.rawValue
         ]
         if let next = schedule.nextCover, idleTimer != nil { state["nextCover"] = ISO8601DateFormatter().string(from: next) }
         if let deadline = settings.awake.expiresAt { state["awakeExpiresAt"] = ISO8601DateFormatter().string(from: deadline) }

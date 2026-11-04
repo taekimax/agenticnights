@@ -33,7 +33,8 @@ All files below are under `Sources/`.
 | `SleepPrevention.swift` | Own `caffeinate -di` or `-i`, bounded by parent PID and optional remaining duration |
 | `Shortcut.swift` | Shortcut representation, validation and display |
 | `GlobalShortcut.swift` | Carbon shortcut registration and replacement |
-| `SettingsWindow.swift` | Three-section settings window; immediate valid edits and minute-field validation |
+| `SettingsWindow.swift` | Four-section settings window; immediate valid edits and minute-field validation |
+| `LaunchAtLogin.swift` | `SMAppService.mainApp` login-item registration; macOS owns the state |
 | `main.swift` | Menu, icon actions, system notifications, one-shot deadlines, settings persistence and changed-state status output |
 | `LegacyPasswordCleanup.swift` | One-time removal of the retired credential through the system utility |
 | `Localization.swift` | Bundled English/Korean, language selection, validated user overrides and old-default recognition |
@@ -49,6 +50,8 @@ Automatic blackout uses HID idle time and a one-shot timer for the remaining qui
 While blackout is active, enabling VoiceOver requests `SACLockScreenImmediate`. Sleep, login lock and inactive sessions suspend blackout, restore display output and preserve intent for return. Ordinary Quit, Cmd-Q and SIGTERM require authentication when protected blackout is active; system shutdown/logout may proceed. Force termination remains outside this lifecycle.
 
 Sleep prevention is independent of blackout and authentication. It owns one `caffeinate` process: `-di` with Keep Display On, otherwise `-i`, plus `-w <app-pid>` and optional `-t <remaining-seconds>`. Duration changes restart the deadline; input and relaunch do not. A display-option change preserves the deadline. Expiry disables prevention and returns control to macOS. No daily hours or persistent power-setting changes are used.
+
+Open at login registers the app bundle with `SMAppService.mainApp`. The state is read from macOS each time Settings refreshes or becomes key, so approval or removal in System Settings › Login Items is reflected; it is not stored in `VeilSettings`. `status.json` records it as `launchAtLogin` (`enabled`, `disabled`, `requiresApproval`, `unavailable`).
 
 Settings apply immediately. Minute fields commit on Return or focus departure; invalid values preserve the previous setting. A failed shortcut registration preserves the prior shortcut. Turning Require Authentication off needs a separate `.deviceOwnerAuthentication` prompt; the checkbox keeps its value until that prompt succeeds. An account without a login password can turn it off directly. Every other setting, including sleep controls, changes without authentication. Enabling the option is refused when macOS cannot authenticate the account.
 
