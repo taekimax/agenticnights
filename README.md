@@ -8,11 +8,13 @@
 
 Screen blackout and sleep prevention for macOS, without a system permission grant.
 
-**2.1.1 · build 17 · macOS 13+ · English / Korean · MIT**
+**2.2.0 · build 18 · macOS 13+ · English / Korean · MIT**
 
 ### Install
 
-Requires Git, Python 3 and Xcode Command Line Tools.
+Download the Apple silicon app from [GitHub Releases](https://github.com/taekimax/agenticnights/releases/latest), unzip it and copy it to Applications. This release uses ad-hoc signing and is not notarized.
+
+To build from source, install Git, Python 3, Xcode Command Line Tools and an internet connection for the pinned Sparkle dependency.
 
 ```sh
 git clone https://github.com/taekimax/agenticnights.git
@@ -55,6 +57,12 @@ Choose **No Limit** or a duration of 1–1440 minutes. The duration starts when 
 
 Turn on **Open at login** in Settings to start agenticnights whenever you log in, including after a restart or after macOS ends your session. macOS stores this as a login item; manage or remove it in System Settings › General › Login Items. If macOS asks for approval, Settings shows **Open Login Items…**. Off by default.
 
+### App updates
+
+Right-click the moon and choose **Check for Updates…**. **Automatically Check for Updates** is on by default; switch it off in the same menu. Sparkle checks about once a day and verifies downloaded updates with EdDSA. You choose whether to download and install; unattended installation is disabled.
+
+Update checks wait until blackout ends and your session is active. While an update check or installation window is open, blackout is temporarily unavailable. After downloading an update, postponing the restart can leave it queued for installation when you quit. Existing versions without Sparkle need one manual installation of 2.2.0.
+
 ### Language and upgrades
 
 Edit files in `~/Library/Application Support/agenticnights/Translations/`, then restart. `language.txt` accepts `auto`, `en`, `ko` or a custom language code. To add a language, copy [en.json](Resources/Translations/en.json) to `<code>.json`; preserve keys and `{placeholders}`. Missing or invalid entries fall back to bundled text. Previously exported default wording updates in memory; your files and custom edits are preserved.
@@ -69,11 +77,13 @@ Existing authentication preferences move to macOS account authentication. The re
 
 시스템 권한 허용 없이 사용하는 macOS 화면 가리기·잠자기 방지 앱입니다.
 
-**2.1.1 · 빌드 17 · macOS 13 이상 · 영어 / 한국어 · MIT**
+**2.2.0 · 빌드 18 · macOS 13 이상 · 영어 / 한국어 · MIT**
 
 ### 설치
 
-Git, Python 3, Xcode Command Line Tools가 필요합니다.
+[GitHub Releases](https://github.com/taekimax/agenticnights/releases/latest)에서 Apple Silicon용 앱을 받아 압축을 풀고 응용 프로그램 폴더로 옮기세요. 이번 배포는 임시 서명을 사용하며 Apple 공증을 받지 않았습니다.
+
+소스에서 빌드하려면 Git, Python 3, Xcode Command Line Tools와 Sparkle 다운로드를 위한 인터넷 연결이 필요합니다.
 
 ```sh
 git clone https://github.com/taekimax/agenticnights.git
@@ -115,6 +125,12 @@ open /Applications/agenticnights.app
 ### 로그인 시 열기
 
 설정에서 **로그인 시 열기**를 켜면 로그인할 때마다 agenticnights가 실행됩니다. 재시동 후나 macOS가 세션을 종료한 뒤에도 적용됩니다. macOS가 로그인 항목으로 관리하며, 시스템 설정 › 일반 › 로그인 항목에서 확인하거나 제거할 수 있습니다. macOS가 승인을 요구하면 설정에 **로그인 항목 열기…** 버튼이 표시됩니다. 기본값은 꺼짐입니다.
+
+### 앱 업데이트
+
+달 아이콘을 우클릭하고 **업데이트 확인…**을 선택하세요. **자동으로 업데이트 확인**은 기본으로 켜져 있으며 같은 메뉴에서 끌 수 있습니다. Sparkle이 약 하루에 한 번 확인하고, 다운로드한 업데이트의 EdDSA 서명을 검증합니다. 다운로드·설치는 사용자가 선택하며 무인 자동 설치는 꺼져 있습니다.
+
+화면 가리기가 끝나고 세션이 활성화되면 업데이트를 확인합니다. 업데이트 확인·설치 창이 열려 있는 동안에는 화면 가리기를 잠시 사용할 수 없습니다. 다운로드 후 재시작을 미루면 앱을 종료할 때 설치될 수 있습니다. Sparkle이 없는 기존 버전은 2.2.0을 한 번 수동 설치해야 합니다.
 
 ### 언어와 업그레이드
 

@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var terminationSignal: DispatchSourceSignal?
     private var shortcut: GlobalShortcut?
     private var settingsWindow: SettingsWindow?
+    private var updates: AppUpdater!
     private var observers: [NSObjectProtocol] = []
     private var sessionActive = true
     private var sleeping = false
@@ -74,8 +75,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             else { self.updateState() }
         }
         shortcut = GlobalShortcut(shortcut: settings.shortcut) { [weak self] in self?.toggleCover() }
+        updates = AppUpdater()
+        updates.canBeginUpdate = { [weak self] in
+            guard let self else { return false }
+            return self.sessionAvailable && !self.privacy.isCovered && self.settingsAuthentication == nil && !self.terminating
+        }
+        updates.onChange = { [weak self] in self?.updateState() }
         observeSystem()
         updateState()
+        updates.start()
         if firstLaunch { showSettings() }
     }
 
@@ -175,7 +183,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         idleTimer?.invalidate(); idleTimer = nil
         let now = Date()
         updateAwake(now: now)
-        if sessionAvailable && settings.enabled && !privacy.isCovered && !menuIsOpen && settingsWindow?.window?.isVisible != true {
+        if sessionAvailable && settings.enabled && !privacy.isCovered && !menuIsOpen && !updates.blocksBlackout && settingsWindow?.window?.isVisible != true {
             if schedule.tick(now: now, settings: settings, idleSeconds: userActivity.idleSeconds()) { showCover() }
             if !privacy.isCovered, let next = schedule.nextCover {
                 let delay = max(0.1, next.timeIntervalSinceNow)
@@ -186,6 +194,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
         refreshStatus()
+        updates.resumeIfPossible()
     }
 
     private func updateAwake(now: Date) {
@@ -244,7 +253,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return item
         }
         let blackoutKey = privacy.isCovered ? (settings.requireAuthentication ? "menu.endBlackoutAuth" : "menu.endBlackout") : "menu.blackOut"
-        add(blackoutKey, #selector(toggleCover))
+        add(blackoutKey, #selector(toggleCover)).isEnabled = updates?.blocksBlackout != true
         menu.addItem(.separator())
         add("menu.autoBlackout", #selector(toggleEnabled), checked: settings.enabled)
         let interval = add("menu.autoDelay", nil)
@@ -276,11 +285,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         add("menu.keepDisplayOn", #selector(toggleDisplay), checked: settings.awake.keepDisplayOn)
         menu.addItem(.separator())
         let preferences = add("menu.settings", #selector(showSettings)); preferences.keyEquivalent = ","
+        add("menu.checkUpdates", #selector(checkForUpdates)).isEnabled = updates?.canCheck == true
+        add("menu.autoUpdates", #selector(toggleAutomaticUpdates), checked: updates?.automaticallyChecks == true)
         let quit = add("menu.quit", #selector(NSApplication.terminate(_:))); quit.target = NSApp; quit.keyEquivalent = "q"
     }
 
     func menuWillOpen(_ menu: NSMenu) { menuIsOpen = true; idleTimer?.invalidate(); idleTimer = nil }
     func menuDidClose(_ menu: NSMenu) { menuIsOpen = false; updateState() }
+
+    @objc private func checkForUpdates() { updates.check() }
+    @objc private func toggleAutomaticUpdates() {
+        updates.automaticallyChecks.toggle()
+        refreshStatus()
+    }
 
     @objc private func setInterval(_ sender: NSMenuItem) {
         var updated = settings; updated.intervalMinutes = sender.tag; _ = applySettings(updated)
@@ -301,7 +318,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func showCover() {
-        guard sessionAvailable, !privacy.isCovered else { return }
+        guard sessionAvailable, !privacy.isCovered, !updates.blocksBlackout else { return }
         // Blackout closes Settings; its pending prompt must not linger offscreen.
         settingsAuthentication?.invalidate(); settingsAuthentication = nil
         settingsWindow?.close()
@@ -432,7 +449,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             "coverStatus": coverStatusText, "awakeStatus": awakeStatusText,
             "shortcutStatus": shortcut?.registrationStatus ?? -1,
             "sessionAvailable": sessionAvailable,
-            "launchAtLogin": LaunchAtLogin.state.rawValue
+            "launchAtLogin": LaunchAtLogin.state.rawValue,
+            "automaticallyChecksForUpdates": updates?.automaticallyChecks == true,
+            "updateSessionInProgress": updates?.blocksBlackout == true
         ]
         if let next = schedule.nextCover, idleTimer != nil { state["nextCover"] = ISO8601DateFormatter().string(from: next) }
         if let deadline = settings.awake.expiresAt { state["awakeExpiresAt"] = ISO8601DateFormatter().string(from: deadline) }

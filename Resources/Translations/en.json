@@ -69,5 +69,8 @@
   "startup.approval": "Waiting for approval in System Settings › General › Login Items.",
   "startup.openSettings": "Open Login Items…",
   "startup.unavailable": "macOS cannot register this copy as a login item. Install the app in Applications.",
-  "error.startup": "Couldn't change Open at login: {error}"
+  "error.startup": "Couldn't change Open at login: {error}",
+  "menu.checkUpdates": "Check for Updates…",
+  "menu.autoUpdates": "Automatically Check for Updates",
+  "update.endBlackout": "End the blackout before checking for updates."
 }

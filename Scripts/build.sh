@@ -3,18 +3,25 @@ set -euo pipefail
 project_root="${0:A:h:h}"
 build_root="$project_root/.build"
 app_bundle="$build_root/agenticnights.app"
+sparkle_root="$("$project_root/Scripts/fetch-sparkle.sh")"
 mkdir -p "$app_bundle/Contents/MacOS" "$app_bundle/Contents/Resources" "$build_root/ModuleCache"
 xcrun swiftc -swift-version 5 -O -num-threads 2 \
   -module-cache-path "$build_root/ModuleCache" \
   -target "$(uname -m)-apple-macosx13.0" \
   "$project_root"/Sources/*.swift \
-  -framework AppKit -framework Carbon \
+  -F "$sparkle_root" -framework Sparkle -framework AppKit -framework Carbon \
+  -Xlinker -rpath -Xlinker @executable_path/../Frameworks \
   -o "$app_bundle/Contents/MacOS/agenticnights"
 cp "$project_root/Resources/Info.plist" "$app_bundle/Contents/Info.plist"
 "$project_root/Scripts/build-icon.sh"
 cp "$build_root/AppIcon.icns" "$app_bundle/Contents/Resources/AppIcon.icns"
 cp "$project_root/LICENSE" "$app_bundle/Contents/Resources/LICENSE"
 cp "$project_root/THIRD_PARTY_NOTICES.md" "$app_bundle/Contents/Resources/THIRD_PARTY_NOTICES.md"
+cp "$sparkle_root/LICENSE" "$app_bundle/Contents/Resources/Sparkle-LICENSE.txt"
+mkdir -p "$app_bundle/Contents/Frameworks"
+rm -rf "$app_bundle/Contents/Frameworks/Sparkle.framework"
+ditto "$sparkle_root/Sparkle.framework" "$app_bundle/Contents/Frameworks/Sparkle.framework"
+# Preserve Sparkle's upstream signatures, including its installer and XPC services.
 # Recreate only the generated resource directory so removed catalogs cannot linger.
 rm -rf "$app_bundle/Contents/Resources/Translations"
 cp -R "$project_root/Resources/Translations" "$app_bundle/Contents/Resources/Translations"

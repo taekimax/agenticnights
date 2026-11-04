@@ -1,6 +1,6 @@
 # Development
 
-Swift / AppKit, macOS 13+, no package dependencies. Version 2.1.1 (build 17). [User guide](README.md).
+Swift / AppKit, macOS 13+, Sparkle 2.10.1. Version 2.2.0 (build 18). [User guide](README.md).
 
 ## Build and delivery
 
@@ -11,6 +11,8 @@ Swift / AppKit, macOS 13+, no package dependencies. Version 2.1.1 (build 17). [U
 | `open /Applications/agenticnights.app` | Launch the installed app |
 | `./Scripts/test.sh` | Schedule/settings migration, localization, simulated brightness and click classification checks |
 | `./Scripts/test-interactions.sh` | Carbon shortcut registration and offscreen English/Korean Settings behavior/layout checks |
+| `./Scripts/test-updates.py` | Opt-in real Sparkle cancel, tamper rejection, install and relaunch in isolated scratch apps; release key in Keychain required |
+| `./Scripts/prepare-release.sh release-notes.html` | Build, ZIP, generate appcast and verify the archive signature without publishing |
 | `./Scripts/test-privacy-live.sh [output-directory]` | Opt-in real gamma/backlight lifecycle checks |
 | `./Scripts/test-privacy-live.sh [output-directory] --authentication` | Open real macOS authentication; requires a human to authenticate or cancel |
 
@@ -35,6 +37,7 @@ All files below are under `Sources/`.
 | `GlobalShortcut.swift` | Carbon shortcut registration and replacement |
 | `SettingsWindow.swift` | Four-section settings window; immediate valid edits and minute-field validation |
 | `LaunchAtLogin.swift` | `SMAppService.mainApp` login-item registration; macOS owns the state |
+| `AppUpdater.swift` | Sparkle controller, automatic-check preference and blackout/session exclusion |
 | `main.swift` | Menu, icon actions, system notifications, one-shot deadlines, settings persistence and changed-state status output |
 | `LegacyPasswordCleanup.swift` | One-time removal of the retired credential through the system utility |
 | `Localization.swift` | Bundled English/Korean, language selection, validated user overrides and old-default recognition |
@@ -76,3 +79,21 @@ Status records blackout/authentication state, settings, localization warnings an
 The [2.0 delivery record](docs/no-permission-delivery-2026-11-02.md) owns current evidence and pending checks. Pure click classification and injected brightness tests cannot establish physical click delivery, panel appearance or brightness restoration on hardware. The opt-in live harness reads real gamma ramps and can request system authentication; it does not establish every human scenario. Touch ID and password separately, cancellation/Cmd-Tab, VoiceOver lock, protected quit paths, monitor hot-plug, real brightness restoration, agent capture/input compatibility, both UI languages and power comparisons require individually recorded results. DisplayLink is unsupported. `Experiments/PrivacyProbe` remains historical evidence rather than a current product path.
 
 Distribute [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) with the app.
+
+## Sparkle releases
+
+`Scripts/fetch-sparkle.sh` pins the official 2.10.1 archive and SHA-256; the framework, its original signed helpers, symlinks and license are embedded without re-signing upstream code. The host retains its existing ad-hoc signature. Current output targets the build Mac’s architecture (arm64 here), macOS 13+. This is not a Developer ID signed or notarized distribution.
+
+The EdDSA private key is in this Mac’s login Keychain under Sparkle’s `com.tk.agenticnights` account. Only the public key is in `Resources/Info.plist`. To set up signing on another Mac, transfer the key using Sparkle’s `generate_keys -x` / `-f` workflow through a secure private location; never commit or upload the exported key. Keep a secure backup before erasing the keychain. The preparation script refuses a mismatched key.
+
+For each release:
+
+1. Increment both version strings in `Resources/Info.plist`; update the guides and write release notes as an HTML fragment.
+2. Run the relevant tests and `./Scripts/prepare-release.sh /absolute/path/release-notes.html`. Output is `.build/releases/v<version>/`; repeated preparation of the same version is refused to preserve the reviewed archive.
+3. Review the appcast, including version, architecture, asset URL and signature. Commit and push the source to `git@github.com:taekimax/agenticnights.git`.
+4. Create a draft GitHub Release tagged `v<version>` at that exact commit. Upload `agenticnights-<version>-<arch>.zip` and `appcast.xml` from the prepared directory, then publish it as the latest release. Do not publish a latest release without its appcast.
+5. Fetch `https://github.com/taekimax/agenticnights/releases/latest/download/appcast.xml` and the referenced ZIP; compare their bytes with the prepared files. Install the same staged app and verify signature/payload equality with `./Scripts/install.sh`, then launch separately.
+
+`SUEnableAutomaticChecks` defaults on; the menu writes Sparkle’s own preference. Unattended downloads/installations are disabled with `SUAllowsAutomaticUpdates=false`. `SUVerifyUpdateBeforeExtraction` requires archive validation before extraction. Checks are rejected while blackout, account authentication or an unavailable session is active; a blocked scheduled check is retried when the session permits it. An active Sparkle session suppresses manual and scheduled blackout until it finishes. Sparkle’s normal deferred-install-on-quit behavior remains after the user has chosen to download an update. The main-thread AppKit owner uses `@preconcurrency import Sparkle` to bridge the existing Swift 5 callback code; all calls occur on the main thread.
+
+Official references: [setup](https://sparkle-project.org/documentation/), [publishing](https://sparkle-project.org/documentation/publishing/), [updater API](https://sparkle-project.org/documentation/api-reference/Protocols/SPUUpdaterDelegate.html).

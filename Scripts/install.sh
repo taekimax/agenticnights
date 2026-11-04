@@ -45,6 +45,30 @@ if destination.exists():
             time.sleep(0.1)
     if pids:
         raise SystemExit("App did not finish quitting; previous installation preserved.")
+    # Only workers whose executable is inside this exact app bundle belong here.
+    rows = subprocess.check_output(["ps", "-axo", "pid=,command="], text=True).splitlines()
+    workers = [int(row.strip().split(None, 1)[0]) for row in rows
+               if len(row.strip().split(None, 1)) == 2
+               and row.strip().split(None, 1)[1].startswith(str(destination / "Contents/Frameworks/Sparkle.framework") + "/")]
+    for pid in workers:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    deadline = time.monotonic() + 5
+    while workers and time.monotonic() < deadline:
+        alive = []
+        for pid in workers:
+            try:
+                os.kill(pid, 0)
+                alive.append(pid)
+            except ProcessLookupError:
+                pass
+        workers = alive
+        if workers:
+            time.sleep(0.1)
+    if workers:
+        raise SystemExit("Sparkle workers did not quit; previous installation preserved.")
     trash = pathlib.Path.home() / ".Trash"
     trash.mkdir(exist_ok=True)
     stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
@@ -60,5 +84,28 @@ print(f"Installed: {destination}")
 PY
 codesign --verify --deep --strict --verbose=2 "$installed_app"
 cmp "$staged_app/Contents/MacOS/agenticnights" "$installed_app/Contents/MacOS/agenticnights"
-diff -qr "$staged_app" "$installed_app"
+python3 - "$staged_app" "$installed_app" <<'PY'
+import hashlib
+import os
+import pathlib
+import stat
+import sys
+
+def inventory(root):
+    entries = {}
+    for folder, directories, files in os.walk(root, followlinks=False):
+        for name in directories + files:
+            path = pathlib.Path(folder) / name
+            relative = str(path.relative_to(root))
+            mode = stat.S_IMODE(path.lstat().st_mode)
+            if path.is_symlink():
+                entries[relative] = ('symlink', os.readlink(path))
+            elif path.is_file():
+                entries[relative] = ('file', mode, hashlib.sha256(path.read_bytes()).hexdigest())
+            else:
+                entries[relative] = ('directory', mode)
+    return entries
+
+assert inventory(pathlib.Path(sys.argv[1])) == inventory(pathlib.Path(sys.argv[2])), 'Installed payload differs from stage'
+PY
 print 'PASS: installed signature and full staged/installed payload equality'

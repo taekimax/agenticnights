@@ -84,3 +84,10 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Sparkle
+
+- Project: [sparkle-project/Sparkle](https://github.com/sparkle-project/Sparkle)
+- Version: 2.10.1, official prebuilt framework; MIT and included third-party notices.
+- The complete upstream license and dependency notices are bundled as `Contents/Resources/Sparkle-LICENSE.txt`.
+- Local owner: [Sources/AppUpdater.swift](Sources/AppUpdater.swift).

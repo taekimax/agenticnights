@@ -69,5 +69,8 @@
   "startup.approval": "시스템 설정 › 일반 › 로그인 항목에서 승인을 기다리는 중입니다.",
   "startup.openSettings": "로그인 항목 열기…",
   "startup.unavailable": "이 앱 사본은 로그인 항목으로 등록할 수 없습니다. 응용 프로그램 폴더에 설치하세요.",
-  "error.startup": "로그인 시 열기를 변경하지 못했습니다: {error}"
+  "error.startup": "로그인 시 열기를 변경하지 못했습니다: {error}",
+  "menu.checkUpdates": "업데이트 확인…",
+  "menu.autoUpdates": "자동으로 업데이트 확인",
+  "update.endBlackout": "화면 가리기를 해제한 뒤 업데이트를 확인하세요."
 }
